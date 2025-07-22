@@ -9,6 +9,8 @@ rust-version.workspace = true
 mitigations = { workspace = true }
 tracing = { workspace = true }
 anyhow = { workspace = true }
+crossbeam = { workspace = true }
+rand = { workspace = true }
 windows = { workspace = true, features = [
   "Win32_Foundation",
   "Win32_System_Power",

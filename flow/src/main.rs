@@ -29,7 +29,6 @@ fn main() {
         let _ = proxy.send_event(app::UserEvent::MenuEvent(event));
     }));
 
-    idler_utils::spawn_idle_threads();
     idler_utils::ExecState::start();
 
     let mut app = app::Application::default();

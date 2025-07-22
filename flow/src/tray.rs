@@ -7,7 +7,11 @@ use tray_icon::{
 
 const RAW_ICON: &[u8] = include_bytes!("../../resources/icon.png");
 
-pub fn next_half_hours() -> Vec<NaiveTime> {
+pub const DEFAULT: &str = "Flow is running.";
+pub const DISABLE_SHUTDOWN: &str = "disable_shutdown";
+
+#[allow(dead_code)]
+fn next_half_hours_impl() -> Vec<NaiveTime> {
     let now = chrono::Local::now().time();
     let mut times = Vec::new();
     let mut minute = if now.minute() < 30 { 30 } else { 0 };
@@ -25,6 +29,39 @@ pub fn next_half_hours() -> Vec<NaiveTime> {
         }
     }
     trace!("Next half hours: {:?}", times);
+    times
+}
+
+pub fn next_half_hours() -> Vec<NaiveTime> {
+    #[cfg(debug_assertions)]
+    {
+        next_ten_minutes()
+    }
+    #[cfg(not(debug_assertions))]
+    {
+        next_half_hours_impl()
+    }
+}
+
+#[cfg(debug_assertions)]
+pub fn next_ten_minutes() -> Vec<NaiveTime> {
+    let now = chrono::Local::now().time();
+    let mut times = Vec::new();
+    let mut minute = (now.minute() + 1) % 60;
+    let mut hour = now.hour();
+    if minute <= now.minute() {
+        hour = (hour + 1) % 24;
+    }
+    for _ in 0..10 {
+        let t = NaiveTime::from_hms_opt(hour % 24, minute, 0).unwrap();
+        times.push(t);
+        minute += 1;
+        if minute == 60 {
+            minute = 0;
+            hour = (hour + 1) % 24;
+        }
+    }
+    trace!("Next ten minutes: {:?}", times);
     times
 }
 
@@ -49,12 +86,15 @@ pub fn get_icon(bytes: &[u8]) -> Result<tray_icon::Icon, Box<dyn std::error::Err
 }
 
 pub fn get_menu() -> Result<Menu, Box<dyn std::error::Error>> {
-    let submenu_items = next_half_hours()
+    let mut items = next_half_hours()
         .iter()
-        .map(|t| {
-            let label = format!("{:02}:{:02}", t.hour(), t.minute());
-            MenuItem::with_id(label.clone(), label, true, None)
-        })
+        .map(|t| t.format("%H:%M").to_string())
+        .collect::<Vec<_>>();
+    items.push(DISABLE_SHUTDOWN.to_string());
+
+    let submenu_items = items
+        .iter()
+        .map(|t| MenuItem::with_id(t.clone(), t, true, None))
         .collect::<Vec<_>>();
 
     let submenu = Submenu::new("Shutdown at", true);
@@ -71,6 +111,6 @@ pub fn get_tray() -> Result<TrayIcon, Box<dyn std::error::Error>> {
     Ok(TrayIconBuilder::new()
         .with_menu(Box::new(get_menu()?))
         .with_icon(icon)
-        .with_tooltip("Flow is running.")
+        .with_tooltip(DEFAULT)
         .build()?)
 }

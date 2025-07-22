@@ -1,0 +1,16 @@
+[package]
+name = "app_controller"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+tracing = { workspace = true }
+chrono = { workspace = true }
+mitigations = { workspace = true }
+idler_utils = { workspace = true }
+crossbeam = { workspace = true }
+
+[lints]
+workspace = true

@@ -1,5 +1,8 @@
 use anyhow::{Result, anyhow};
-use tracing::{debug, error, info, trace};
+use crossbeam::channel::{Receiver, Sender, bounded};
+use rand::{Rng, rng};
+use std::time::Duration;
+use tracing::{debug, error, info};
 use windows::{
     Win32::{
         Foundation::GetLastError,
@@ -12,58 +15,104 @@ use windows::{
         },
         UI::Input::KeyboardAndMouse::{
             GetLastInputInfo, INPUT, INPUT_0, INPUT_KEYBOARD, INPUT_MOUSE, KEYBD_EVENT_FLAGS,
-            KEYBDINPUT, KEYEVENTF_KEYUP, LASTINPUTINFO, MOUSEEVENTF_WHEEL, MOUSEINPUT, SendInput,
-            VK_ESCAPE,
+            KEYBDINPUT, KEYEVENTF_KEYUP, LASTINPUTINFO, MOUSEEVENTF_MOVE, MOUSEINPUT, SendInput,
+            VIRTUAL_KEY, VK_CAPITAL, VK_CONTROL, VK_MENU, VK_SHIFT,
         },
     },
     core::BOOL,
 };
 
-const MAX_IDLE: u64 = 10; // Maximum idle time in seconds
+/// Default maximum idle time in seconds
+#[cfg(debug_assertions)]
+const DEFAULT_MAX_IDLE: u64 = 5;
 
-const MOUSE_INPUT: INPUT = INPUT {
-    r#type: INPUT_MOUSE,
-    Anonymous: INPUT_0 {
-        mi: MOUSEINPUT {
-            dx: 0,
-            dy: 0,
-            mouseData: 1,
-            dwFlags: MOUSEEVENTF_WHEEL,
-            time: 0,
-            dwExtraInfo: 0,
-        },
-    },
-};
+#[cfg(not(debug_assertions))]
+const DEFAULT_MAX_IDLE: u64 = 60;
 
-const KEYBOARD_INPUT: [INPUT; 2] = [
+/// Less intrusive mouse input: move by 0,0
+fn mouse_move_input() -> INPUT {
     INPUT {
-        r#type: INPUT_KEYBOARD,
+        r#type: INPUT_MOUSE,
         Anonymous: INPUT_0 {
-            ki: KEYBDINPUT {
-                wVk: VK_ESCAPE,
-                wScan: 1,
-                dwFlags: KEYBD_EVENT_FLAGS(0),
+            mi: MOUSEINPUT {
+                dx: 0,
+                dy: 0,
+                mouseData: 0,
+                dwFlags: MOUSEEVENTF_MOVE,
                 time: 0,
                 dwExtraInfo: 0,
             },
         },
-    },
-    INPUT {
-        r#type: INPUT_KEYBOARD,
-        Anonymous: INPUT_0 {
-            ki: KEYBDINPUT {
-                wVk: VK_ESCAPE,
-                wScan: 1,
-                dwFlags: KEYEVENTF_KEYUP,
-                time: 0,
-                dwExtraInfo: 0,
+    }
+}
+
+/// Enum for safe, non-disruptive keys
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SafeKey {
+    Shift,
+    Control,
+    Alt,
+    CapsLock,
+}
+
+impl SafeKey {
+    #[must_use]
+    pub fn to_virtual_key(self) -> VIRTUAL_KEY {
+        match self {
+            SafeKey::Shift => VK_SHIFT,
+            SafeKey::Control => VK_CONTROL,
+            SafeKey::Alt => VK_MENU,
+            SafeKey::CapsLock => VK_CAPITAL,
+        }
+    }
+
+    /// Returns all safe keys
+    #[must_use]
+    pub fn all() -> &'static [SafeKey] {
+        static SAFE_KEYS: [SafeKey; 4] = [
+            SafeKey::Shift,
+            SafeKey::Control,
+            SafeKey::Alt,
+            SafeKey::CapsLock,
+        ];
+        &SAFE_KEYS
+    }
+}
+
+/// Generates a key press/release INPUT pair for a given `SafeKey`.
+#[must_use]
+pub fn make_key_input(key: SafeKey) -> [INPUT; 2] {
+    let vk = key.to_virtual_key();
+    [
+        INPUT {
+            r#type: INPUT_KEYBOARD,
+            Anonymous: INPUT_0 {
+                ki: KEYBDINPUT {
+                    wVk: vk,
+                    wScan: 0,
+                    dwFlags: KEYBD_EVENT_FLAGS(0),
+                    time: 0,
+                    dwExtraInfo: 0,
+                },
             },
         },
-    },
-];
+        INPUT {
+            r#type: INPUT_KEYBOARD,
+            Anonymous: INPUT_0 {
+                ki: KEYBDINPUT {
+                    wVk: vk,
+                    wScan: 0,
+                    dwFlags: KEYEVENTF_KEYUP,
+                    time: 0,
+                    dwExtraInfo: 0,
+                },
+            },
+        },
+    ]
+}
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
-enum InputType {
+pub enum InputType {
     Mouse,
     Keyboard,
 }
@@ -96,14 +145,20 @@ impl ExecState {
     }
 }
 
+/// Sends a random safe key input from the provided list of virtual key codes.
 fn send_key_input() -> Result<()> {
-    for item in KEYBOARD_INPUT {
-        let value = unsafe { SendInput(&[item], size_of_val(&[item]).try_into()?) };
+    let mut rng = rng();
+    let safe_keys = SafeKey::all();
+    let key = safe_keys[rng.random_range(0..safe_keys.len())];
+    let key_pair = make_key_input(key);
+    let size = i32::try_from(std::mem::size_of::<INPUT>())?;
+    for item in key_pair {
+        let value = unsafe { SendInput(&[item], size) };
         if value == 1 {
-            info!("Sent KeyboardInput");
+            info!("Sent KeyboardInput: {:?}", key);
         } else {
             let err = unsafe { GetLastError() };
-            error!("Failed to send KeyboardInput, last err {:?}", err);
+            error!("Failed to send KeyboardInput {:?}, last err {:?}", key, err);
             return Err(anyhow!("{:?}", err));
         }
     }
@@ -111,7 +166,9 @@ fn send_key_input() -> Result<()> {
 }
 
 fn send_mouse_input() -> Result<()> {
-    if unsafe { SendInput(&[MOUSE_INPUT], size_of_val(&[MOUSE_INPUT]).try_into()?) } == 1 {
+    let input = mouse_move_input();
+    let size = i32::try_from(std::mem::size_of::<INPUT>())?;
+    if unsafe { SendInput(&[input], size) } == 1 {
         info!("Sent MouseInput");
         Ok(())
     } else {
@@ -121,22 +178,22 @@ fn send_mouse_input() -> Result<()> {
     }
 }
 
-fn send_mixed_input(input_type: InputType) {
-    if input_type == InputType::Mouse {
-        let _ = send_mouse_input();
+/// Sends either a mouse or random safe key input.
+fn send_random_input() -> Result<()> {
+    let mut rng = rng();
+    if rng.random_bool(0.5) {
+        send_mouse_input()
     } else {
-        let _ = send_key_input();
+        send_key_input()
     }
 }
 
 fn get_last_input() -> Option<u64> {
-    let mut last_input = LASTINPUTINFO::default();
-
-    last_input.cbSize = if let Ok(val) = size_of_val(&last_input).try_into() {
-        val
-    } else {
-        error!("Failed to get size of last input");
-        return None;
+    let mut last_input = LASTINPUTINFO {
+        cbSize: u32::try_from(std::mem::size_of::<LASTINPUTINFO>())
+            .inspect_err(|e| error!("Failed to get size of LASTINPUTINFO: {:?}", e))
+            .ok()?,
+        ..Default::default()
     };
     let total_ticks;
     unsafe {
@@ -146,54 +203,94 @@ fn get_last_input() -> Option<u64> {
         }
         total_ticks = GetTickCount64();
     }
-    Some(std::time::Duration::from_millis(total_ticks - u64::from(last_input.dwTime)).as_secs())
+    Some(Duration::from_millis(total_ticks - u64::from(last_input.dwTime)).as_secs())
 }
 
-/// The main idle loop.
-///
-/// # Errors
-///
-/// This function will return an error if there is a problem with the registry operations or
-/// sending inputs to the system.
-#[allow(clippy::missing_panics_doc)]
-pub fn idle_loop() -> Result<()> {
+fn idle_loop(max_idle: u64, stop_rx: &Receiver<()>) -> Result<()> {
     debug!("Start idle time thread");
-    let mut max_idle = MAX_IDLE;
-
-    if cfg!(debug_assertions) && max_idle < 60 {
-        info!("Force interval is less than 60 seconds, setting to 60 seconds");
-        max_idle = 60;
-    }
-
+    let mut rng = rng();
+    let sleep_base = Duration::from_secs(max_idle * 94 / 100);
     loop {
+        if stop_rx.try_recv().is_ok() {
+            info!("Idle loop shutdown requested (channel), 1");
+            break;
+        }
         let idle_time = get_last_input().unwrap_or(0);
         if idle_time >= (max_idle * 94 / 100) {
             ExecState::user_present();
-            send_mixed_input(InputType::Mouse);
-            if get_last_input() >= Some(idle_time) {
-                send_mixed_input(InputType::Keyboard);
-                std::thread::sleep(std::time::Duration::from_secs(10));
+            match send_random_input() {
+                Ok(()) => info!("Simulated input after {}s idle", idle_time),
+                Err(e) => error!("Failed to send input: {e:?}"),
             }
-            if get_last_input() >= Some(idle_time) {
-                error!("Failed to reset idle time, skipping");
+            let sleep_secs = rng.random_range(5..=15);
+            if stop_rx
+                .recv_timeout(Duration::from_secs(sleep_secs))
+                .is_ok()
+            {
+                info!("Idle loop shutdown requested (channel), 2");
+                break;
             }
-            continue;
+        } else {
+            info!("Idle time: {}s, waiting for input", idle_time);
+            let sleep_ms = rng.random_range(
+                u64::try_from(sleep_base.as_millis() / 2)?..=u64::try_from(sleep_base.as_millis())?,
+            );
+            if stop_rx
+                .recv_timeout(Duration::from_millis(sleep_ms))
+                .is_ok()
+            {
+                info!("Idle loop shutdown requested (channel), 3");
+                break;
+            }
         }
-        std::thread::sleep(std::time::Duration::from_secs(max_idle * 94 / 100));
+    }
+    Ok(())
+}
+
+pub struct IdleController {
+    stop_tx: Sender<()>,
+    thread_handle: std::thread::JoinHandle<()>,
+}
+
+impl IdleController {
+    /// # Errors
+    /// Returns an error if the stop signal fails to send.
+    pub fn stop(self) -> Result<()> {
+        if self.stop_tx.send(()).is_err() {
+            error!("Failed to send stop signal to idle thread");
+            return Err(anyhow!("Failed to send stop signal"));
+        }
+        drop(self.stop_tx);
+        info!("Stop signal sent to idle thread, waiting for it to finish");
+        if let Err(e) = self.thread_handle.join() {
+            error!("Idle thread join failed: {:?}", e);
+            return Err(anyhow!("Idle thread join failed"));
+        }
+        info!("Thread join successful");
+        info!("Idle thread stopped successfully");
+        Ok(())
     }
 }
 
-pub fn spawn_idle_threads() {
-    std::thread::spawn(move || {
+#[must_use]
+pub fn spawn_idle_thread(max_idle: Option<u64>) -> IdleController {
+    let idle = max_idle.unwrap_or(DEFAULT_MAX_IDLE);
+    let (stop_tx, stop_rx) = bounded::<()>(1);
+    let thread_handle = std::thread::spawn(move || {
         mitigations::hide_current_thread_from_debuggers();
-        trace!("Starting idle thread after {MAX_IDLE} seconds delay");
-        std::thread::sleep(std::time::Duration::from_secs(MAX_IDLE));
-        loop {
-            let status = idle_loop();
-            if status.is_err() {
-                error!("Failed to run idle loop with err: {:?}", status);
-            }
-            std::thread::sleep(std::time::Duration::from_secs(60));
+        info!("Starting idle thread after {idle} seconds delay");
+        if stop_rx.recv_timeout(Duration::from_secs(idle)).is_ok() {
+            info!("Idle loop shutdown requested (channel)");
+            return;
+        }
+
+        let status = idle_loop(idle, &stop_rx);
+        if let Err(e) = status {
+            error!("Idle loop exited with error: {e:?}");
         }
     });
+    IdleController {
+        stop_tx,
+        thread_handle,
+    }
 }

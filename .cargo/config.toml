@@ -1,2 +1,2 @@
 [build]
-rustflags = ["-C", "control-flow-guard", "-C", "target-feature=+crt-static"]
+rustflags = ["-C", "control-flow-guard"]
