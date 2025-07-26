@@ -15,16 +15,10 @@ pub enum UserEvent {
     MenuEvent(tray_icon::menu::MenuEvent),
 }
 
-#[derive(Debug)]
-struct Shutdown {
-    tx: crossbeam::channel::Sender<String>,
-    join_handle: std::thread::JoinHandle<()>,
-}
-
 pub(crate) struct Application {
     tray_icon: Option<TrayIcon>,
     last_tray_update: Option<std::time::Instant>,
-    shutdown: Arc<RwLock<Option<Shutdown>>>,
+    shutdown: Arc<RwLock<Option<app_controller::AppController>>>,
     idle_controller: Option<idler_utils::IdleController>,
 }
 
@@ -160,23 +154,21 @@ fn handle_menu_event(
                 }
             }
 
-            if let Some(data) = app.shutdown.write().unwrap().take() {
+            if let Some(shutdown) = app.shutdown.write().unwrap().take() {
                 info!("Shutdown data taken");
-                let tx = data.tx;
-                drop(tx);
-                let handle = data.join_handle;
-
-                trace!("Joining shutdown thread...");
-                if let Err(e) = handle.join() {
-                    error!("Failed to join shutdown thread: {e:?}");
-                } else {
-                    info!("Shutdown thread joined successfully.");
-                }
+                let status = shutdown.close();
+                info!("Shutdown handler disabled, status: {status:?}");
             }
         }
         data => {
             if data == tray::DISABLE_SHUTDOWN {
                 info!("Disable shutdown menu item clicked, disabling shutdown.");
+                if let Some(shutdown) = app.shutdown.write().unwrap().take() {
+                    let status = shutdown.close();
+                    info!("Shutdown handler disabled, status: {status:?}");
+                } else {
+                    warn!("No shutdown handler to disable.");
+                }
                 app.set_text(tray::DEFAULT.to_string());
                 return;
             }
@@ -188,20 +180,15 @@ fn handle_menu_event(
                 drop(shutdown);
                 info!("Initializing shutdown handler.");
                 let mut shutdown = app.shutdown.write().unwrap();
-                let (tx, rx) = crossbeam::channel::bounded(1);
 
-                let handle = app_controller::close_app_remote(rx);
+                let controller = app_controller::AppController::new();
 
-                if let Err(e) = tx.send(data.to_string()) {
-                    error!("Failed to send shutdown time: {e}");
-                }
-                trace!("Shutdown time sent: {data}");
-
-                let shutdown_struct = Shutdown {
-                    tx,
-                    join_handle: handle,
+                let Ok(()) = controller.send_event(data.to_string()) else {
+                    error!("Failed to send shutdown time");
+                    return;
                 };
-                *shutdown = Some(shutdown_struct);
+                *shutdown = Some(controller);
+
                 info!("Shutdown handler initialized.");
                 app.set_text(format!("Shutdown scheduled for: {data}"));
                 return;
@@ -213,7 +200,7 @@ fn handle_menu_event(
             };
 
             info!("Sending shutdown time: {data}");
-            if let Err(e) = shutdown.tx.send(data.to_string()) {
+            if let Err(e) = shutdown.send_event(data.to_string()) {
                 error!("Failed to send shutdown time: {e}");
             }
             app.set_text(format!("Shutdown scheduled for: {data}"));

@@ -6,6 +6,7 @@ edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+anyhow = { workspace = true }
 chrono = { workspace = true }
 crossbeam = { workspace = true }
 idler_utils = { workspace = true }

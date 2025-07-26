@@ -1,76 +1,169 @@
+use anyhow::Result;
 use chrono::{Local, NaiveTime, TimeDelta};
 use std::{
-    sync::mpsc,
     thread::{self, JoinHandle},
     time::Duration,
 };
-use tracing::{debug, error, info, trace};
+use tracing::{error, info, trace};
 
-#[must_use]
-pub fn close_app_remote(rx: crossbeam::channel::Receiver<String>) -> JoinHandle<()> {
+fn get_time(time: &str) -> Option<NaiveTime> {
+    NaiveTime::parse_from_str(time, "%H:%M").ok()
+}
+
+enum Status {
+    NewTime(NaiveTime),
+    Shutdown,
+}
+
+fn get_status(status: &str) -> Option<Status> {
+    match status {
+        "shutdown" => Some(Status::Shutdown),
+        time if time.len() == 5 => get_time(time).map(Status::NewTime),
+        _ => None,
+    }
+}
+
+fn get_diff(received_time: NaiveTime) -> Option<Duration> {
+    let now = Local::now().time();
+    let diff = if let Ok(dur) = received_time.signed_duration_since(now).to_std() {
+        dur
+    } else {
+        let Some(current_diff) = now
+            .signed_duration_since(received_time)
+            .checked_add(&TimeDelta::days(1))
+        else {
+            error!("Failed to add 1 day to time");
+            return None;
+        };
+        match current_diff.to_std() {
+            Ok(d) => d,
+            Err(err) => {
+                error!("Err converting {current_diff} to std, err: {err}");
+                return None;
+            }
+        }
+    };
+    Some(diff)
+}
+
+fn check_close_condition(data: &str) -> Option<Duration> {
+    trace!("Received time: {data:?}");
+    let Some(status) = get_status(data) else {
+        info!("Received non time value, {data}. Returning");
+        return None;
+    };
+
+    let Status::NewTime(received_time) = status else {
+        return None;
+    };
+
+    trace!("Received time: {received_time:?}");
+    let Some(diff) = get_diff(received_time) else {
+        info!("Failed to get diff for time: {received_time:?}");
+        return None;
+    };
+
+    let secs = diff.as_secs();
+    trace!("Time difference in seconds: {secs}");
+    if secs < 5 {
+        info!("Shutdown");
+        idler_utils::ExecState::stop();
+        std::process::exit(0);
+    }
+    info!("Scheduling shutdown in {diff:?}");
+    Some(Duration::from_secs(diff.as_secs()))
+}
+
+pub struct AppController {
+    close_handle: JoinHandle<()>,
+    sender: crossbeam::channel::Sender<String>,
+}
+
+impl AppController {
+    #[must_use]
+    pub fn new() -> Self {
+        let (tx, rx) = crossbeam::channel::bounded(1);
+        let handle = schedule_close(rx);
+        AppController {
+            close_handle: handle,
+            sender: tx,
+        }
+    }
+
+    /// Sends an event to the controller.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if sending the event fails.
+    pub fn send_event(&self, event: String) -> Result<()> {
+        self.sender
+            .send(event)
+            .inspect_err(|e| error!("Failed to send event: {e}"))?;
+        Ok(())
+    }
+
+    /// Closes the controller, sending a shutdown signal and waiting for the close handle to finish.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if sending the shutdown signal fails or if joining the close handle fails.
+    pub fn close(self) -> Result<()> {
+        self.sender
+            .send("shutdown".to_string())
+            .inspect_err(|e| error!("Failed to send shutdown signal: {e}"))?;
+        self.close_handle.join().map_err({
+            |e| {
+                error!("Failed to join close handle: {e:?}");
+                anyhow::anyhow!("Failed to join close handle: {e:?}")
+            }
+        })?;
+        Ok(())
+    }
+}
+
+impl Default for AppController {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+fn schedule_close(rx: crossbeam::channel::Receiver<String>) -> JoinHandle<()> {
     thread::spawn(move || {
         info!("Starting shutdown handler thread");
         mitigations::hide_current_thread_from_debuggers();
-        let mut _sender: Option<mpsc::Sender<()>> = None;
+        let Ok(data) = rx.recv() else {
+            error!("Failed to receive data");
+            return;
+        };
+        let mut current_data = data;
+        let Some(mut diff) = check_close_condition(&current_data) else {
+            error!("Failed to get initial diff, exiting thread");
+            return;
+        };
         loop {
-            let hour = match rx.recv() {
+            trace!("Waiting for data with timeout: {diff:?}");
+            let data: String = match rx.recv_timeout(diff) {
                 Ok(val) => val,
-                Err(err) => {
-                    info!("Received err: {err}");
-                    return;
-                }
-            };
-            if hour == "shutdown" {
-                info!("Received shutdown signal, exiting");
-                return;
-            }
-            debug!("Received time: {hour:?}");
-            let Ok(received_time) = NaiveTime::parse_from_str(&hour, "%H:%M") else {
-                info!("Received non time value, {hour}. Ignorring");
-                _sender = None;
-                continue;
-            };
-            let (sen, receiver) = mpsc::channel::<()>();
-            _sender = Some(sen);
-
-            trace!("Received time: {received_time:?}, spawning thread");
-            thread::spawn(move || {
-                mitigations::hide_current_thread_from_debuggers();
-                loop {
-                    let now = Local::now().time();
-                    let diff = if let Ok(dur) = received_time.signed_duration_since(now).to_std() {
-                        dur
-                    } else {
-                        let Some(current_diff) = now
-                            .signed_duration_since(received_time)
-                            .checked_add(&TimeDelta::days(1))
-                        else {
-                            error!("Failed to add 1 day to time");
-                            break;
+                Err(err) => match err {
+                    crossbeam::channel::RecvTimeoutError::Timeout => {
+                        trace!("No data received, continuing");
+                        let Some(new_diff) = check_close_condition(&current_data) else {
+                            return;
                         };
-                        match current_diff.to_std() {
-                            Ok(d) => d,
-                            Err(err) => {
-                                error!("Err converting {current_diff} to std, err: {err}");
-                                break;
-                            }
-                        }
-                    };
-
-                    if diff.as_secs() == 0 {
-                        info!("Shutdown");
-                        idler_utils::ExecState::stop();
-                        std::process::exit(0);
+                        diff = new_diff;
+                        continue;
                     }
-                    match receiver.recv_timeout(Duration::from_millis(500)) {
-                        Ok(()) | Err(mpsc::RecvTimeoutError::Disconnected) => {
-                            info!("Cancelling task for: {received_time}");
-                            break;
-                        }
-                        Err(mpsc::RecvTimeoutError::Timeout) => {}
+                    crossbeam::channel::RecvTimeoutError::Disconnected => {
+                        info!("Channel disconnected, exiting thread");
+                        return;
                     }
-                }
-            });
+                },
+            };
+            current_data = data;
+            let Some(new_diff) = check_close_condition(&current_data) else {
+                return;
+            };
+            diff = new_diff;
         }
     })
 }
