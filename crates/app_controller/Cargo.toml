@@ -6,11 +6,11 @@ edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-tracing = { workspace = true }
 chrono = { workspace = true }
-mitigations = { workspace = true }
-idler_utils = { workspace = true }
 crossbeam = { workspace = true }
+idler_utils = { workspace = true }
+mitigations = { workspace = true }
+tracing = { workspace = true }
 
 [lints]
 workspace = true

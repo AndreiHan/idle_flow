@@ -5,12 +5,11 @@ use tray_icon::{
     menu::{Menu, MenuItem, Submenu},
 };
 
-const RAW_ICON: &[u8] = include_bytes!("../../resources/icon.png");
-
 pub const DEFAULT: &str = "Flow is running.";
 pub const DISABLE_SHUTDOWN: &str = "disable_shutdown";
 
 #[allow(dead_code)]
+#[inline]
 fn next_half_hours_impl() -> Vec<NaiveTime> {
     let now = chrono::Local::now().time();
     let mut times = Vec::new();
@@ -32,6 +31,7 @@ fn next_half_hours_impl() -> Vec<NaiveTime> {
     times
 }
 
+#[inline]
 pub fn next_half_hours() -> Vec<NaiveTime> {
     #[cfg(debug_assertions)]
     {
@@ -44,6 +44,7 @@ pub fn next_half_hours() -> Vec<NaiveTime> {
 }
 
 #[cfg(debug_assertions)]
+#[inline]
 pub fn next_ten_minutes() -> Vec<NaiveTime> {
     let now = chrono::Local::now().time();
     let mut times = Vec::new();
@@ -65,10 +66,13 @@ pub fn next_ten_minutes() -> Vec<NaiveTime> {
     times
 }
 
+#[inline]
 pub(crate) fn get_default_icon() -> Result<tray_icon::Icon, Box<dyn std::error::Error>> {
-    get_icon(RAW_ICON)
+    let raw_icon = include_bytes!("../../resources/icon.png");
+    get_icon(raw_icon)
 }
 
+#[inline]
 pub fn get_icon(bytes: &[u8]) -> Result<tray_icon::Icon, Box<dyn std::error::Error>> {
     use image::GenericImageView;
 
@@ -85,6 +89,7 @@ pub fn get_icon(bytes: &[u8]) -> Result<tray_icon::Icon, Box<dyn std::error::Err
     )?)
 }
 
+#[inline]
 pub fn get_menu() -> Result<Menu, Box<dyn std::error::Error>> {
     let mut items = next_half_hours()
         .iter()
@@ -106,6 +111,7 @@ pub fn get_menu() -> Result<Menu, Box<dyn std::error::Error>> {
     Ok(Menu::with_items(&[&submenu, &quit_item])?)
 }
 
+#[inline]
 pub fn get_tray() -> Result<TrayIcon, Box<dyn std::error::Error>> {
     let icon = get_default_icon()?;
     Ok(TrayIconBuilder::new()

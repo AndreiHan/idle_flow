@@ -1,4 +1,6 @@
-use std::ffi::c_void;
+#![cfg(windows)]
+#![no_std]
+use core::ffi::c_void;
 use tracing::info;
 use windows::{
     Wdk::System::Threading::{NtSetInformationThread, ThreadHideFromDebugger},
@@ -14,6 +16,7 @@ use windows::{
     },
 };
 
+#[inline]
 pub fn enable_mitigations() {
     info!("Enabling mitigations...");
     hide_current_thread_from_debuggers();
@@ -31,7 +34,7 @@ pub fn hide_current_thread_from_debuggers() {
         NtSetInformationThread(
             GetCurrentThread(),
             ThreadHideFromDebugger,
-            std::ptr::null(),
+            core::ptr::null(),
             0,
         )
     };
@@ -47,8 +50,8 @@ pub fn prevent_third_party_dll_loading() {
     let status = unsafe {
         SetProcessMitigationPolicy(
             ProcessSignaturePolicy,
-            std::ptr::from_mut(&mut policy).cast::<c_void>(),
-            std::mem::size_of_val(&policy),
+            core::ptr::from_mut(&mut policy).cast::<c_void>(),
+            core::mem::size_of_val(&policy),
         )
     };
     info!("Set process mitigation policy status: {:?}", status);
@@ -66,8 +69,8 @@ pub fn enable_arbitrary_code_guard() {
     let status = unsafe {
         SetProcessMitigationPolicy(
             ProcessDynamicCodePolicy,
-            std::ptr::from_mut(&mut policy).cast::<c_void>(),
-            std::mem::size_of_val(&policy),
+            core::ptr::from_mut(&mut policy).cast::<c_void>(),
+            core::mem::size_of_val(&policy),
         )
     };
     info!("Set process mitigation policy status: {:?}", status);

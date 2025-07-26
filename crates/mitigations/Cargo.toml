@@ -5,6 +5,10 @@ authors.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 
+[package.metadata.docs.rs]
+default-target = "x86_64-pc-windows-msvc"
+targets = []
+
 [dependencies]
 tracing = { workspace = true }
 windows = { workspace = true, features = [

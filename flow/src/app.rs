@@ -9,12 +9,13 @@ use winit::application::ApplicationHandler;
 
 use crate::tray;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum UserEvent {
     TrayIconEvent(tray_icon::TrayIconEvent),
     MenuEvent(tray_icon::menu::MenuEvent),
 }
 
+#[derive(Debug)]
 struct Shutdown {
     tx: crossbeam::channel::Sender<String>,
     join_handle: std::thread::JoinHandle<()>,
@@ -98,6 +99,7 @@ impl ApplicationHandler<UserEvent> for Application {
     }
 }
 
+#[inline]
 fn handle_tray_icon_event(
     app: &mut Application,
     _event_loop: &winit::event_loop::ActiveEventLoop,
@@ -138,6 +140,7 @@ fn handle_tray_icon_event(
     }
 }
 
+#[inline]
 fn handle_menu_event(
     app: &mut Application,
     event_loop: &winit::event_loop::ActiveEventLoop,

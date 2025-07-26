@@ -1,18 +1,18 @@
+#![cfg(windows)]
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
-use tracing::error;
+use tracing::{error, trace};
 mod app;
 mod tray;
 
 fn main() {
     mitigations::enable_mitigations();
-
     #[cfg(debug_assertions)]
     {
         let _ = tracing_subscriber::fmt()
             .with_max_level(tracing::Level::TRACE)
             .try_init();
     }
-
+    trace!("Starting Flow application");
     let Ok(event_loop) = winit::event_loop::EventLoop::<app::UserEvent>::with_user_event().build()
     else {
         error!("Failed to create event loop");

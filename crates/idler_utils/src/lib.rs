@@ -1,7 +1,7 @@
+#![cfg(windows)]
 use anyhow::{Result, anyhow};
 use crossbeam::channel::{Receiver, Sender, bounded};
 use rand::{Rng, rng};
-use std::time::Duration;
 use tracing::{debug, error, info};
 use windows::{
     Win32::{
@@ -151,7 +151,7 @@ fn send_key_input() -> Result<()> {
     let safe_keys = SafeKey::all();
     let key = safe_keys[rng.random_range(0..safe_keys.len())];
     let key_pair = make_key_input(key);
-    let size = i32::try_from(std::mem::size_of::<INPUT>())?;
+    let size = i32::try_from(core::mem::size_of::<INPUT>())?;
     for item in key_pair {
         let value = unsafe { SendInput(&[item], size) };
         if value == 1 {
@@ -167,7 +167,7 @@ fn send_key_input() -> Result<()> {
 
 fn send_mouse_input() -> Result<()> {
     let input = mouse_move_input();
-    let size = i32::try_from(std::mem::size_of::<INPUT>())?;
+    let size = i32::try_from(core::mem::size_of::<INPUT>())?;
     if unsafe { SendInput(&[input], size) } == 1 {
         info!("Sent MouseInput");
         Ok(())
@@ -190,26 +190,26 @@ fn send_random_input() -> Result<()> {
 
 fn get_last_input() -> Option<u64> {
     let mut last_input = LASTINPUTINFO {
-        cbSize: u32::try_from(std::mem::size_of::<LASTINPUTINFO>())
+        cbSize: u32::try_from(core::mem::size_of::<LASTINPUTINFO>())
             .inspect_err(|e| error!("Failed to get size of LASTINPUTINFO: {:?}", e))
             .ok()?,
         ..Default::default()
     };
     let total_ticks;
     unsafe {
-        if GetLastInputInfo(std::ptr::from_mut(&mut last_input)) != BOOL(1) {
+        if GetLastInputInfo(core::ptr::from_mut(&mut last_input)) != BOOL(1) {
             error!("Failed to get last input info, {:?}", GetLastError());
             return None;
         }
         total_ticks = GetTickCount64();
     }
-    Some(Duration::from_millis(total_ticks - u64::from(last_input.dwTime)).as_secs())
+    Some(core::time::Duration::from_millis(total_ticks - u64::from(last_input.dwTime)).as_secs())
 }
 
 fn idle_loop(max_idle: u64, stop_rx: &Receiver<()>) -> Result<()> {
     debug!("Start idle time thread");
     let mut rng = rng();
-    let sleep_base = Duration::from_secs(max_idle * 94 / 100);
+    let sleep_base = core::time::Duration::from_secs(max_idle * 94 / 100);
     loop {
         if stop_rx.try_recv().is_ok() {
             info!("Idle loop shutdown requested (channel), 1");
@@ -224,7 +224,7 @@ fn idle_loop(max_idle: u64, stop_rx: &Receiver<()>) -> Result<()> {
             }
             let sleep_secs = rng.random_range(5..=15);
             if stop_rx
-                .recv_timeout(Duration::from_secs(sleep_secs))
+                .recv_timeout(core::time::Duration::from_secs(sleep_secs))
                 .is_ok()
             {
                 info!("Idle loop shutdown requested (channel), 2");
@@ -236,7 +236,7 @@ fn idle_loop(max_idle: u64, stop_rx: &Receiver<()>) -> Result<()> {
                 u64::try_from(sleep_base.as_millis() / 2)?..=u64::try_from(sleep_base.as_millis())?,
             );
             if stop_rx
-                .recv_timeout(Duration::from_millis(sleep_ms))
+                .recv_timeout(core::time::Duration::from_millis(sleep_ms))
                 .is_ok()
             {
                 info!("Idle loop shutdown requested (channel), 3");
@@ -247,6 +247,7 @@ fn idle_loop(max_idle: u64, stop_rx: &Receiver<()>) -> Result<()> {
     Ok(())
 }
 
+#[derive(Debug)]
 pub struct IdleController {
     stop_tx: Sender<()>,
     thread_handle: std::thread::JoinHandle<()>,
@@ -279,7 +280,10 @@ pub fn spawn_idle_thread(max_idle: Option<u64>) -> IdleController {
     let thread_handle = std::thread::spawn(move || {
         mitigations::hide_current_thread_from_debuggers();
         info!("Starting idle thread after {idle} seconds delay");
-        if stop_rx.recv_timeout(Duration::from_secs(idle)).is_ok() {
+        if stop_rx
+            .recv_timeout(core::time::Duration::from_secs(idle))
+            .is_ok()
+        {
             info!("Idle loop shutdown requested (channel)");
             return;
         }
