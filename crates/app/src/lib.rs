@@ -4,33 +4,23 @@ use std::{
 };
 
 use tracing::{error, info, trace, warn};
+use tray::UserEvent;
 use tray_icon::TrayIcon;
 use winit::application::ApplicationHandler;
 
-use crate::tray;
-
-#[derive(Debug, Clone)]
-pub enum UserEvent {
-    TrayIconEvent(tray_icon::TrayIconEvent),
-    MenuEvent(tray_icon::menu::MenuEvent),
-}
-
-pub(crate) struct Application {
+pub struct Application {
+    sender_proxy: winit::event_loop::EventLoopProxy<UserEvent>,
     tray_icon: Option<TrayIcon>,
     last_tray_update: Option<std::time::Instant>,
     shutdown: Arc<RwLock<Option<app_controller::AppController>>>,
     idle_controller: Option<idler_utils::IdleController>,
 }
 
-impl Default for Application {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl Application {
-    fn new() -> Application {
+    #[must_use]
+    pub fn new(sender_proxy: winit::event_loop::EventLoopProxy<UserEvent>) -> Application {
         Application {
+            sender_proxy,
             tray_icon: None,
             last_tray_update: None,
             shutdown: Arc::new(RwLock::new(None)),
@@ -93,7 +83,6 @@ impl ApplicationHandler<UserEvent> for Application {
     }
 }
 
-#[inline]
 fn handle_tray_icon_event(
     app: &mut Application,
     _event_loop: &winit::event_loop::ActiveEventLoop,
@@ -134,7 +123,6 @@ fn handle_tray_icon_event(
     }
 }
 
-#[inline]
 fn handle_menu_event(
     app: &mut Application,
     event_loop: &winit::event_loop::ActiveEventLoop,
@@ -181,7 +169,7 @@ fn handle_menu_event(
                 info!("Initializing shutdown handler.");
                 let mut shutdown = app.shutdown.write().unwrap();
 
-                let controller = app_controller::AppController::new();
+                let controller = app_controller::AppController::new(app.sender_proxy.clone());
 
                 let Ok(()) = controller.send_event(data.to_string()) else {
                     error!("Failed to send shutdown time");

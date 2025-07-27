@@ -46,7 +46,10 @@ fn get_diff(received_time: NaiveTime) -> Option<Duration> {
     Some(diff)
 }
 
-fn check_close_condition(data: &str) -> Option<Duration> {
+fn check_close_condition(
+    sender_proxy: &winit::event_loop::EventLoopProxy<tray::UserEvent>,
+    data: &str,
+) -> Option<Duration> {
     trace!("Received time: {data:?}");
     let Some(status) = get_status(data) else {
         info!("Received non time value, {data}. Returning");
@@ -67,8 +70,14 @@ fn check_close_condition(data: &str) -> Option<Duration> {
     trace!("Time difference in seconds: {secs}");
     if secs < 5 {
         info!("Shutdown");
-        idler_utils::ExecState::stop();
-        std::process::exit(0);
+
+        let event = tray::UserEvent::MenuEvent(tray_icon::menu::MenuEvent {
+            id: tray_icon::menu::MenuId("quit".to_string()),
+        });
+
+        let status = sender_proxy.send_event(event);
+        trace!("Sent shutdown event: {status:?}");
+        return None;
     }
     info!("Scheduling shutdown in {diff:?}");
     Some(Duration::from_secs(diff.as_secs()))
@@ -81,9 +90,9 @@ pub struct AppController {
 
 impl AppController {
     #[must_use]
-    pub fn new() -> Self {
+    pub fn new(sender_proxy: winit::event_loop::EventLoopProxy<tray::UserEvent>) -> Self {
         let (tx, rx) = crossbeam::channel::bounded(1);
-        let handle = schedule_close(rx);
+        let handle = schedule_close(sender_proxy, rx);
         AppController {
             close_handle: handle,
             sender: tx,
@@ -121,13 +130,10 @@ impl AppController {
     }
 }
 
-impl Default for AppController {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-fn schedule_close(rx: crossbeam::channel::Receiver<String>) -> JoinHandle<()> {
+fn schedule_close(
+    proxy: winit::event_loop::EventLoopProxy<tray::UserEvent>,
+    rx: crossbeam::channel::Receiver<String>,
+) -> JoinHandle<()> {
     thread::spawn(move || {
         info!("Starting shutdown handler thread");
         mitigations::hide_current_thread_from_debuggers();
@@ -136,7 +142,7 @@ fn schedule_close(rx: crossbeam::channel::Receiver<String>) -> JoinHandle<()> {
             return;
         };
         let mut current_data = data;
-        let Some(mut diff) = check_close_condition(&current_data) else {
+        let Some(mut diff) = check_close_condition(&proxy, &current_data) else {
             error!("Failed to get initial diff, exiting thread");
             return;
         };
@@ -147,7 +153,7 @@ fn schedule_close(rx: crossbeam::channel::Receiver<String>) -> JoinHandle<()> {
                 Err(err) => match err {
                     crossbeam::channel::RecvTimeoutError::Timeout => {
                         trace!("No data received, continuing");
-                        let Some(new_diff) = check_close_condition(&current_data) else {
+                        let Some(new_diff) = check_close_condition(&proxy, &current_data) else {
                             return;
                         };
                         diff = new_diff;
@@ -160,7 +166,7 @@ fn schedule_close(rx: crossbeam::channel::Receiver<String>) -> JoinHandle<()> {
                 },
             };
             current_data = data;
-            let Some(new_diff) = check_close_condition(&current_data) else {
+            let Some(new_diff) = check_close_condition(&proxy, &current_data) else {
                 return;
             };
             diff = new_diff;

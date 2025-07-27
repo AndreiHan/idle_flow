@@ -1,8 +1,10 @@
 [workspace]
 members = [
+    "crates/app",
     "crates/app_controller",
     "crates/idler_utils",
     "crates/mitigations",
+    "crates/tray",
     "flow",
 ]
 resolver = "2"
@@ -11,7 +13,7 @@ resolver = "2"
 edition = "2024"
 rust-version = "1.88"
 authors = ["IF"]
-version = "0.1.1"
+version = "0.1.2"
 
 [workspace.dependencies]
 anyhow = "1.0.98"
@@ -24,11 +26,13 @@ tracing = "0.1.41"
 tracing-subscriber = "0.3.19"
 tray-icon = "0.21.0"
 windows = "0.61.3"
-winit = "0.30.11"
+winit = "0.30.12"
 
+app = { path = "crates/app" }
 app_controller = { path = "crates/app_controller" }
 idler_utils = { path = "crates/idler_utils" }
 mitigations = { path = "crates/mitigations" }
+tray = { path = "crates/tray" }
 
 [workspace.lints.clippy]
 pedantic = { level = "warn", priority = -1 }

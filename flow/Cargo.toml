@@ -16,20 +16,17 @@ default-target = "x86_64-pc-windows-msvc"
 targets = []
 
 [dependencies]
-app_controller = { workspace = true }
-chrono = { workspace = true }
-crossbeam = { workspace = true }
 idler_utils = { workspace = true }
-image = { workspace = true }
 mitigations = { workspace = true }
-rand = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 tray-icon = { workspace = true }
 winit = { workspace = true }
 
+app = { workspace = true }
+tray = { workspace = true }
+
 [build-dependencies]
-rand = { workspace = true }
 tauri-winres = { workspace = true }
 
 [lints]

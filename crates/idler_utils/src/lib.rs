@@ -16,7 +16,7 @@ use windows::{
         UI::Input::KeyboardAndMouse::{
             GetLastInputInfo, INPUT, INPUT_0, INPUT_KEYBOARD, INPUT_MOUSE, KEYBD_EVENT_FLAGS,
             KEYBDINPUT, KEYEVENTF_KEYUP, LASTINPUTINFO, MOUSEEVENTF_MOVE, MOUSEINPUT, SendInput,
-            VIRTUAL_KEY, VK_CAPITAL, VK_CONTROL, VK_MENU, VK_SHIFT,
+            VIRTUAL_KEY, VK_CONTROL, VK_MENU, VK_SHIFT,
         },
     },
     core::BOOL,
@@ -52,7 +52,6 @@ pub enum SafeKey {
     Shift,
     Control,
     Alt,
-    CapsLock,
 }
 
 impl SafeKey {
@@ -62,19 +61,13 @@ impl SafeKey {
             SafeKey::Shift => VK_SHIFT,
             SafeKey::Control => VK_CONTROL,
             SafeKey::Alt => VK_MENU,
-            SafeKey::CapsLock => VK_CAPITAL,
         }
     }
 
     /// Returns all safe keys
     #[must_use]
     pub fn all() -> &'static [SafeKey] {
-        static SAFE_KEYS: [SafeKey; 4] = [
-            SafeKey::Shift,
-            SafeKey::Control,
-            SafeKey::Alt,
-            SafeKey::CapsLock,
-        ];
+        static SAFE_KEYS: [SafeKey; 3] = [SafeKey::Shift, SafeKey::Control, SafeKey::Alt];
         &SAFE_KEYS
     }
 }

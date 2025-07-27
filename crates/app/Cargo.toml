@@ -1,0 +1,22 @@
+[package]
+name = "app"
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+version.workspace = true
+
+[package.metadata.docs.rs]
+default-target = "x86_64-pc-windows-msvc"
+targets = []
+
+[dependencies]
+app_controller = { workspace = true }
+idler_utils = { workspace = true }
+tracing = { workspace = true }
+tray-icon = { workspace = true }
+winit = { workspace = true }
+
+tray = { workspace = true }
+
+[lints]
+workspace = true

@@ -1,2 +1,7 @@
 [build]
-rustflags = ["-C", "control-flow-guard"]
+rustflags = [
+    "-D", "warnings",
+    "--cfg", "windows_slim_errors", 
+    "-C", "control-flow-guard",
+    "-C", "target-feature=-crt-static",
+]

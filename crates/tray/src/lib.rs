@@ -1,3 +1,5 @@
+use std::error::Error;
+
 use chrono::{NaiveTime, Timelike};
 use tracing::trace;
 use tray_icon::{
@@ -8,8 +10,15 @@ use tray_icon::{
 pub const DEFAULT: &str = "Flow is running.";
 pub const DISABLE_SHUTDOWN: &str = "disable_shutdown";
 
+#[derive(Debug, Clone)]
+pub enum UserEvent {
+    TrayIconEvent(tray_icon::TrayIconEvent),
+    MenuEvent(tray_icon::menu::MenuEvent),
+}
+
 #[allow(dead_code)]
 #[inline]
+#[must_use]
 fn next_half_hours_impl() -> Vec<NaiveTime> {
     let now = chrono::Local::now().time();
     let mut times = Vec::new();
@@ -32,6 +41,7 @@ fn next_half_hours_impl() -> Vec<NaiveTime> {
 }
 
 #[inline]
+#[must_use]
 pub fn next_half_hours() -> Vec<NaiveTime> {
     #[cfg(debug_assertions)]
     {
@@ -43,6 +53,7 @@ pub fn next_half_hours() -> Vec<NaiveTime> {
     }
 }
 
+#[allow(clippy::missing_panics_doc)]
 #[cfg(debug_assertions)]
 #[inline]
 pub fn next_ten_minutes() -> Vec<NaiveTime> {
@@ -67,13 +78,17 @@ pub fn next_ten_minutes() -> Vec<NaiveTime> {
 }
 
 #[inline]
-pub(crate) fn get_default_icon() -> Result<tray_icon::Icon, Box<dyn std::error::Error>> {
-    let raw_icon = include_bytes!("../../resources/icon.png");
+pub(crate) fn get_default_icon() -> Result<tray_icon::Icon, Box<dyn Error>> {
+    let raw_icon = include_bytes!("../../../resources/icon.png");
     get_icon(raw_icon)
 }
 
+/// Converts raw bytes of an image into a tray icon.
+///
+/// # Errors
+/// Returns an error if the image cannot be loaded or converted to a tray icon.
 #[inline]
-pub fn get_icon(bytes: &[u8]) -> Result<tray_icon::Icon, Box<dyn std::error::Error>> {
+pub fn get_icon(bytes: &[u8]) -> Result<tray_icon::Icon, Box<dyn Error>> {
     use image::GenericImageView;
 
     let img = image::load_from_memory(bytes)?;
@@ -89,8 +104,12 @@ pub fn get_icon(bytes: &[u8]) -> Result<tray_icon::Icon, Box<dyn std::error::Err
     )?)
 }
 
+/// Creates a menu for the tray icon with shutdown options.
+///
+/// # Errors
+/// Returns an error if the menu cannot be created or if there is an issue with the submenu
 #[inline]
-pub fn get_menu() -> Result<Menu, Box<dyn std::error::Error>> {
+pub fn get_menu() -> Result<Menu, Box<dyn Error>> {
     let mut items = next_half_hours()
         .iter()
         .map(|t| t.format("%H:%M").to_string())
@@ -111,8 +130,13 @@ pub fn get_menu() -> Result<Menu, Box<dyn std::error::Error>> {
     Ok(Menu::with_items(&[&submenu, &quit_item])?)
 }
 
+/// Creates a tray icon with a default icon and a menu.
+///
+/// # Errors
+///
+/// Returns an error if the icon cannot be created or if the menu cannot be built.
 #[inline]
-pub fn get_tray() -> Result<TrayIcon, Box<dyn std::error::Error>> {
+pub fn get_tray() -> Result<TrayIcon, Box<dyn Error>> {
     let icon = get_default_icon()?;
     Ok(TrayIconBuilder::new()
         .with_menu(Box::new(get_menu()?))

@@ -1,0 +1,15 @@
+[package]
+name = "tray"
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+version.workspace = true
+
+[dependencies]
+chrono = { workspace = true }
+image = { workspace = true }
+tracing = { workspace = true }
+tray-icon = { workspace = true }
+
+[lints]
+workspace = true
