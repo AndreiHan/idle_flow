@@ -1,6 +1,6 @@
 #![cfg(windows)]
-use std::ffi::c_void;
-use tracing::info;
+use std::{ffi::c_void, thread::JoinHandle};
+use tracing::{info, trace};
 use windows::{
     Wdk::System::Threading::{NtSetInformationThread, ThreadHideFromDebugger},
     Win32::System::{
@@ -14,6 +14,31 @@ use windows::{
         },
     },
 };
+
+/// Joins a thread with a timeout.
+///
+/// # Errors
+/// Returns an error if the thread join fails or times out.
+pub fn join_timeout(
+    thread_handle: JoinHandle<()>,
+    timeout: std::time::Duration,
+) -> Result<(), anyhow::Error> {
+    let timeout = std::time::Instant::now() + timeout;
+    trace!("Waiting for thread to finish with timeout: {:?}", timeout);
+    loop {
+        if thread_handle.is_finished() {
+            info!("Thread finished");
+            return thread_handle.join().map_err(|e| {
+                info!("Thread join failed: {:?}", e);
+                anyhow::anyhow!("Thread join failed")
+            });
+        }
+        if timeout < std::time::Instant::now() {
+            info!("Thread join timed out");
+            return Err(anyhow::anyhow!("Thread join timed out"));
+        }
+    }
+}
 
 #[inline]
 pub fn enable_mitigations() {

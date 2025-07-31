@@ -17,6 +17,8 @@ fn main() {
             .try_init();
     }
     trace!("Starting Flow application");
+    idler_utils::ExecState::start();
+
     let Ok(event_loop) = winit::event_loop::EventLoop::<UserEvent>::with_user_event().build()
     else {
         error!("Failed to create event loop");
@@ -33,8 +35,6 @@ fn main() {
         let _ = proxy.send_event(UserEvent::MenuEvent(event));
     }));
 
-    idler_utils::ExecState::start();
-
     let sender_proxy = event_loop.create_proxy();
 
     let mut app = app::Application::new(sender_proxy.clone());
@@ -42,4 +42,5 @@ fn main() {
         error!("Run Error: {err:?}");
         std::process::exit(2);
     }
+    trace!("Flow application exited successfully");
 }

@@ -249,14 +249,14 @@ pub struct IdleController {
 impl IdleController {
     /// # Errors
     /// Returns an error if the stop signal fails to send.
-    pub fn stop(self) -> Result<()> {
+    pub fn stop(self, timeout: core::time::Duration) -> Result<()> {
         if self.stop_tx.send(()).is_err() {
             error!("Failed to send stop signal to idle thread");
             return Err(anyhow!("Failed to send stop signal"));
         }
         drop(self.stop_tx);
         info!("Stop signal sent to idle thread, waiting for it to finish");
-        if let Err(e) = self.thread_handle.join() {
+        if let Err(e) = mitigations::join_timeout(self.thread_handle, timeout) {
             error!("Idle thread join failed: {:?}", e);
             return Err(anyhow!("Idle thread join failed"));
         }

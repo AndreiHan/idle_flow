@@ -8,6 +8,8 @@ use tray::UserEvent;
 use tray_icon::TrayIcon;
 use winit::application::ApplicationHandler;
 
+const TIMEOUT: Duration = Duration::from_secs(5);
+
 pub struct Application {
     sender_proxy: winit::event_loop::EventLoopProxy<UserEvent>,
     tray_icon: Option<TrayIcon>,
@@ -90,7 +92,7 @@ fn handle_tray_icon_event(
 ) {
     if let tray_icon::TrayIconEvent::Move { .. } = event {
         let now = Instant::now();
-        let debounce: Duration = Duration::from_millis(5000);
+        let debounce = Duration::from_secs(120);
         if let Some(last) = app.last_tray_update {
             let elapsed = now.duration_since(last);
             if elapsed < debounce {
@@ -133,26 +135,28 @@ fn handle_menu_event(
             info!("Quit menu item clicked, exiting event loop.");
             idler_utils::ExecState::stop();
             event_loop.exit();
+            info!("Exiting event loop.");
 
             if let Some(idle_controller) = app.idle_controller.take() {
-                if let Err(e) = idle_controller.stop() {
+                if let Err(e) = idle_controller.stop(TIMEOUT) {
                     error!("Failed to stop idle controller: {e}");
                 } else {
                     info!("Idle controller stopped successfully.");
                 }
             }
-
             if let Some(shutdown) = app.shutdown.write().unwrap().take() {
                 info!("Shutdown data taken");
-                let status = shutdown.close();
+                let status = shutdown.close(TIMEOUT);
                 info!("Shutdown handler disabled, status: {status:?}");
             }
+
+            info!("Exiting after cleanup.");
         }
         data => {
             if data == tray::DISABLE_SHUTDOWN {
                 info!("Disable shutdown menu item clicked, disabling shutdown.");
                 if let Some(shutdown) = app.shutdown.write().unwrap().take() {
-                    let status = shutdown.close();
+                    let status = shutdown.close(TIMEOUT);
                     info!("Shutdown handler disabled, status: {status:?}");
                 } else {
                     warn!("No shutdown handler to disable.");
