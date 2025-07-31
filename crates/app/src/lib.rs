@@ -1,12 +1,15 @@
+use anyhow::Result;
 use std::{
-    sync::{Arc, RwLock},
+    sync::{Arc, RwLock, atomic::AtomicBool},
     time::{Duration, Instant},
 };
-
 use tracing::{error, info, trace, warn};
 use tray::UserEvent;
 use tray_icon::TrayIcon;
 use winit::application::ApplicationHandler;
+
+const TIMEOUT: Duration = Duration::from_secs(5);
+static INIT_DONE: AtomicBool = AtomicBool::new(false);
 
 pub struct Application {
     sender_proxy: winit::event_loop::EventLoopProxy<UserEvent>,
@@ -28,12 +31,12 @@ impl Application {
         }
     }
 
-    fn new_tray_icon() -> TrayIcon {
+    fn new_tray_icon() -> Result<TrayIcon> {
         let Ok(tray) = tray::get_tray() else {
             error!("Failed to create tray icon");
-            std::process::exit(1);
+            return Err(anyhow::anyhow!("Failed to create tray icon"));
         };
-        tray
+        Ok(tray)
     }
 
     fn set_text(&self, text: String) {
@@ -50,7 +53,14 @@ impl Application {
 }
 
 impl ApplicationHandler<UserEvent> for Application {
-    fn resumed(&mut self, _event_loop: &winit::event_loop::ActiveEventLoop) {}
+    fn resumed(&mut self, _event_loop: &winit::event_loop::ActiveEventLoop) {
+        if INIT_DONE.load(std::sync::atomic::Ordering::SeqCst) {
+            return;
+        }
+        self.idle_controller = Some(idler_utils::spawn_idle_thread(None));
+        INIT_DONE.store(true, std::sync::atomic::Ordering::SeqCst);
+        info!("Application resumed, idle controller initialized.");
+    }
 
     fn window_event(
         &mut self,
@@ -62,13 +72,19 @@ impl ApplicationHandler<UserEvent> for Application {
 
     fn new_events(
         &mut self,
-        _event_loop: &winit::event_loop::ActiveEventLoop,
+        event_loop: &winit::event_loop::ActiveEventLoop,
         cause: winit::event::StartCause,
     ) {
-        if winit::event::StartCause::Init == cause {
-            self.tray_icon = Some(Self::new_tray_icon());
-            self.idle_controller = Some(idler_utils::spawn_idle_thread(None));
+        if winit::event::StartCause::Init != cause {
+            return;
         }
+        let Ok(tray_icon) = Self::new_tray_icon() else {
+            error!("Failed to create tray icon, exiting event loop.");
+            event_loop.exit();
+            return;
+        };
+        self.tray_icon = Some(tray_icon);
+        info!("Tray icon created successfully.");
     }
 
     fn user_event(&mut self, event_loop: &winit::event_loop::ActiveEventLoop, event: UserEvent) {
@@ -90,7 +106,7 @@ fn handle_tray_icon_event(
 ) {
     if let tray_icon::TrayIconEvent::Move { .. } = event {
         let now = Instant::now();
-        let debounce: Duration = Duration::from_millis(5000);
+        let debounce = Duration::from_secs(120);
         if let Some(last) = app.last_tray_update {
             let elapsed = now.duration_since(last);
             if elapsed < debounce {
@@ -133,26 +149,28 @@ fn handle_menu_event(
             info!("Quit menu item clicked, exiting event loop.");
             idler_utils::ExecState::stop();
             event_loop.exit();
+            info!("Exiting event loop.");
 
             if let Some(idle_controller) = app.idle_controller.take() {
-                if let Err(e) = idle_controller.stop() {
+                if let Err(e) = idle_controller.stop(TIMEOUT) {
                     error!("Failed to stop idle controller: {e}");
                 } else {
                     info!("Idle controller stopped successfully.");
                 }
             }
-
             if let Some(shutdown) = app.shutdown.write().unwrap().take() {
                 info!("Shutdown data taken");
-                let status = shutdown.close();
+                let status = shutdown.close(TIMEOUT);
                 info!("Shutdown handler disabled, status: {status:?}");
             }
+
+            info!("Exiting after cleanup.");
         }
         data => {
             if data == tray::DISABLE_SHUTDOWN {
                 info!("Disable shutdown menu item clicked, disabling shutdown.");
                 if let Some(shutdown) = app.shutdown.write().unwrap().take() {
-                    let status = shutdown.close();
+                    let status = shutdown.close(TIMEOUT);
                     info!("Shutdown handler disabled, status: {status:?}");
                 } else {
                     warn!("No shutdown handler to disable.");

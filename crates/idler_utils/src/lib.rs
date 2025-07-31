@@ -29,7 +29,6 @@ const DEFAULT_MAX_IDLE: u64 = 5;
 #[cfg(not(debug_assertions))]
 const DEFAULT_MAX_IDLE: u64 = 60;
 
-/// Less intrusive mouse input: move by 0,0
 fn mouse_move_input() -> INPUT {
     INPUT {
         r#type: INPUT_MOUSE,
@@ -74,6 +73,7 @@ impl SafeKey {
 
 /// Generates a key press/release INPUT pair for a given `SafeKey`.
 #[must_use]
+#[inline]
 pub fn make_key_input(key: SafeKey) -> [INPUT; 2] {
     let vk = key.to_virtual_key();
     [
@@ -249,14 +249,14 @@ pub struct IdleController {
 impl IdleController {
     /// # Errors
     /// Returns an error if the stop signal fails to send.
-    pub fn stop(self) -> Result<()> {
+    pub fn stop(self, timeout: core::time::Duration) -> Result<()> {
         if self.stop_tx.send(()).is_err() {
             error!("Failed to send stop signal to idle thread");
             return Err(anyhow!("Failed to send stop signal"));
         }
         drop(self.stop_tx);
         info!("Stop signal sent to idle thread, waiting for it to finish");
-        if let Err(e) = self.thread_handle.join() {
+        if let Err(e) = mitigations::join_timeout(self.thread_handle, timeout) {
             error!("Idle thread join failed: {:?}", e);
             return Err(anyhow!("Idle thread join failed"));
         }
@@ -267,6 +267,7 @@ impl IdleController {
 }
 
 #[must_use]
+#[inline]
 pub fn spawn_idle_thread(max_idle: Option<u64>) -> IdleController {
     let idle = max_idle.unwrap_or(DEFAULT_MAX_IDLE);
     let (stop_tx, stop_rx) = bounded::<()>(1);

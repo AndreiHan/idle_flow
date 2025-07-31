@@ -1,6 +1,6 @@
 [build]
 rustflags = [
-    "-D", "warnings",
+    #"-D", "warnings",
     "--cfg", "windows_slim_errors", 
     "-C", "control-flow-guard",
     "-C", "target-feature=-crt-static",

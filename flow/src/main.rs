@@ -4,7 +4,6 @@ use tracing::{error, trace};
 use tray::UserEvent;
 
 fn main() {
-    mitigations::enable_mitigations();
     #[cfg(debug_assertions)]
     {
         let _ = tracing_subscriber::fmt()
@@ -16,11 +15,14 @@ fn main() {
             .with_ansi(true)
             .try_init();
     }
+    mitigations::enable_mitigations();
     trace!("Starting Flow application");
+    idler_utils::ExecState::start();
+
     let Ok(event_loop) = winit::event_loop::EventLoop::<UserEvent>::with_user_event().build()
     else {
         error!("Failed to create event loop");
-        std::process::exit(1);
+        return;
     };
 
     let proxy = event_loop.create_proxy();
@@ -33,13 +35,14 @@ fn main() {
         let _ = proxy.send_event(UserEvent::MenuEvent(event));
     }));
 
-    idler_utils::ExecState::start();
-
     let sender_proxy = event_loop.create_proxy();
 
     let mut app = app::Application::new(sender_proxy.clone());
     if let Err(err) = event_loop.run_app(&mut app) {
         error!("Run Error: {err:?}");
-        std::process::exit(2);
+        return;
     }
+    drop(app);
+    drop(sender_proxy);
+    trace!("Flow application exited successfully");
 }

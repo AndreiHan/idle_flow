@@ -16,7 +16,7 @@ pub enum UserEvent {
     MenuEvent(tray_icon::menu::MenuEvent),
 }
 
-#[allow(dead_code)]
+#[cfg(not(debug_assertions))]
 #[inline]
 #[must_use]
 fn next_half_hours_impl() -> Vec<NaiveTime> {
@@ -53,7 +53,7 @@ pub fn next_half_hours() -> Vec<NaiveTime> {
     }
 }
 
-#[allow(clippy::missing_panics_doc)]
+#[expect(clippy::missing_panics_doc)]
 #[cfg(debug_assertions)]
 #[inline]
 pub fn next_ten_minutes() -> Vec<NaiveTime> {

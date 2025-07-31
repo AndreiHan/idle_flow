@@ -10,6 +10,7 @@ default-target = "x86_64-pc-windows-msvc"
 targets = []
 
 [dependencies]
+anyhow = { workspace = true }
 tracing = { workspace = true }
 windows = { workspace = true, features = [
   "Win32_Foundation",

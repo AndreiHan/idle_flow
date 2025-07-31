@@ -116,17 +116,11 @@ impl AppController {
     /// # Errors
     ///
     /// Returns an error if sending the shutdown signal fails or if joining the close handle fails.
-    pub fn close(self) -> Result<()> {
+    pub fn close(self, timeout: std::time::Duration) -> Result<()> {
         self.sender
             .send("shutdown".to_string())
             .inspect_err(|e| error!("Failed to send shutdown signal: {e}"))?;
-        self.close_handle.join().map_err({
-            |e| {
-                error!("Failed to join close handle: {e:?}");
-                anyhow::anyhow!("Failed to join close handle: {e:?}")
-            }
-        })?;
-        Ok(())
+        mitigations::join_timeout(self.close_handle, timeout)
     }
 }
 
