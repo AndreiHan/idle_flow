@@ -19,7 +19,7 @@ targets = []
 idler_utils = { workspace = true }
 mitigations = { workspace = true }
 tracing = { workspace = true }
-tracing-subscriber = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["tracing-log"] }
 tray-icon = { workspace = true }
 winit = { workspace = true }
 

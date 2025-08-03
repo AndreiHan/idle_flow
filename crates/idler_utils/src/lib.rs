@@ -250,10 +250,8 @@ impl IdleController {
     /// # Errors
     /// Returns an error if the stop signal fails to send.
     pub fn stop(self, timeout: core::time::Duration) -> Result<()> {
-        if self.stop_tx.send(()).is_err() {
-            error!("Failed to send stop signal to idle thread");
-            return Err(anyhow!("Failed to send stop signal"));
-        }
+        let status = self.stop_tx.send(());
+        info!("Stop signal sent to idle thread: {:?}", status);
         drop(self.stop_tx);
         info!("Stop signal sent to idle thread, waiting for it to finish");
         if let Err(e) = mitigations::join_timeout(self.thread_handle, timeout) {

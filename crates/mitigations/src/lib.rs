@@ -8,12 +8,13 @@ use windows::{
             PROCESS_MITIGATION_ASLR_POLICY, PROCESS_MITIGATION_BINARY_SIGNATURE_POLICY,
             PROCESS_MITIGATION_CHILD_PROCESS_POLICY, PROCESS_MITIGATION_DYNAMIC_CODE_POLICY,
             PROCESS_MITIGATION_EXTENSION_POINT_DISABLE_POLICY,
-            PROCESS_MITIGATION_FONT_DISABLE_POLICY,
+            PROCESS_MITIGATION_FONT_DISABLE_POLICY, PROCESS_MITIGATION_IMAGE_LOAD_POLICY,
         },
         Threading::{
-            GetCurrentThread, ProcessASLRPolicy, ProcessChildProcessPolicy,
-            ProcessDynamicCodePolicy, ProcessExtensionPointDisablePolicy, ProcessFontDisablePolicy,
-            ProcessSignaturePolicy, SetProcessMitigationPolicy,
+            GetCurrentThread, PROCESS_MITIGATION_POLICY, ProcessASLRPolicy,
+            ProcessChildProcessPolicy, ProcessDynamicCodePolicy,
+            ProcessExtensionPointDisablePolicy, ProcessFontDisablePolicy, ProcessImageLoadPolicy,
+            ProcessSignaturePolicy, ProcessStrictHandleCheckPolicy, SetProcessMitigationPolicy,
         },
     },
 };
@@ -54,6 +55,8 @@ pub fn enable_mitigations() {
     prevent_child_process_creation();
     prevent_extension_points();
     enable_aslr();
+    set_image_load_policy();
+    set_handle_check_policy();
     info!("Mitigations enabled");
 }
 
@@ -75,18 +78,26 @@ pub fn hide_current_thread_from_debuggers() {
 }
 
 #[inline]
+fn set_process_mitigation_policy<T>(
+    policy: PROCESS_MITIGATION_POLICY,
+    policy_flags: &T,
+) -> Result<(), anyhow::Error> {
+    unsafe {
+        Ok(SetProcessMitigationPolicy(
+            policy,
+            std::ptr::from_ref(policy_flags).cast::<c_void>(),
+            std::mem::size_of_val(policy_flags),
+        )?)
+    }
+}
+
+#[inline]
 pub fn prevent_third_party_dll_loading() {
     info!("Preventing third party dll loading");
     let mut policy = PROCESS_MITIGATION_BINARY_SIGNATURE_POLICY::default();
     unsafe { policy.Anonymous.Flags |= 1 << 0 };
 
-    let status = unsafe {
-        SetProcessMitigationPolicy(
-            ProcessSignaturePolicy,
-            std::ptr::from_mut(&mut policy).cast::<c_void>(),
-            std::mem::size_of_val(&policy),
-        )
-    };
+    let status = set_process_mitigation_policy(ProcessSignaturePolicy, &policy);
     info!("Set process mitigation policy status: {:?}", status);
 }
 
@@ -96,13 +107,7 @@ pub fn prevent_font_policy() {
     let mut policy = PROCESS_MITIGATION_FONT_DISABLE_POLICY::default();
     unsafe { policy.Anonymous.Flags |= 1 << 0 };
 
-    let status = unsafe {
-        SetProcessMitigationPolicy(
-            ProcessFontDisablePolicy,
-            std::ptr::from_mut(&mut policy).cast::<c_void>(),
-            std::mem::size_of_val(&policy),
-        )
-    };
+    let status = set_process_mitigation_policy(ProcessFontDisablePolicy, &policy);
     info!("Set font disable policy status: {:?}", status);
 }
 
@@ -112,13 +117,8 @@ pub fn prevent_child_process_creation() {
     let mut policy = PROCESS_MITIGATION_CHILD_PROCESS_POLICY::default();
     unsafe { policy.Anonymous.Flags |= 1 << 0 };
 
-    let status = unsafe {
-        SetProcessMitigationPolicy(
-            ProcessChildProcessPolicy,
-            std::ptr::from_mut(&mut policy).cast::<c_void>(),
-            std::mem::size_of_val(&policy),
-        )
-    };
+    let status = set_process_mitigation_policy(ProcessChildProcessPolicy, &policy);
+
     info!("Set child process mitigation policy status: {:?}", status);
 }
 
@@ -128,13 +128,7 @@ pub fn prevent_extension_points() {
     let mut policy = PROCESS_MITIGATION_EXTENSION_POINT_DISABLE_POLICY::default();
     unsafe { policy.Anonymous.Flags |= 1 << 0 };
 
-    let status = unsafe {
-        SetProcessMitigationPolicy(
-            ProcessExtensionPointDisablePolicy,
-            std::ptr::from_mut(&mut policy).cast::<c_void>(),
-            std::mem::size_of_val(&policy),
-        )
-    };
+    let status = set_process_mitigation_policy(ProcessExtensionPointDisablePolicy, &policy);
     info!("Set extension point disable policy status: {:?}", status);
 }
 
@@ -148,14 +142,34 @@ pub fn enable_aslr() {
         policy.Anonymous.Flags |= 1 << 2; // Enable high entropy ASLR
     };
 
-    let status = unsafe {
-        SetProcessMitigationPolicy(
-            ProcessASLRPolicy,
-            std::ptr::from_mut(&mut policy).cast::<c_void>(),
-            std::mem::size_of_val(&policy),
-        )
-    };
+    let status = set_process_mitigation_policy(ProcessASLRPolicy, &policy);
     info!("Set ASLR policy status: {:?}", status);
+}
+
+#[inline]
+pub fn set_image_load_policy() {
+    info!("Setting image load policy");
+    let mut policy = PROCESS_MITIGATION_IMAGE_LOAD_POLICY::default();
+    unsafe {
+        policy.Anonymous.Flags |= 1 << 0; // NoRemoteImages
+        policy.Anonymous.Flags |= 1 << 2; // Enable high entropy ASLR
+    };
+
+    let status = set_process_mitigation_policy(ProcessImageLoadPolicy, &policy);
+    info!("Set image load policy status: {:?}", status);
+}
+
+#[inline]
+pub fn set_handle_check_policy() {
+    info!("Setting handle check policy");
+    let mut policy = PROCESS_MITIGATION_CHILD_PROCESS_POLICY::default();
+    unsafe {
+        policy.Anonymous.Flags |= 1 << 0; // RaiseExceptionOnInvalidHandleReference 
+        policy.Anonymous.Flags |= 1 << 1; // HandleExceptionsPermanentlyEnabled 
+    };
+
+    let status = set_process_mitigation_policy(ProcessStrictHandleCheckPolicy, &policy);
+    info!("Set strict handle check policy status: {:?}", status);
 }
 
 #[inline]
@@ -167,12 +181,6 @@ pub fn enable_arbitrary_code_guard() {
     let mut policy = PROCESS_MITIGATION_DYNAMIC_CODE_POLICY::default();
     unsafe { policy.Anonymous.Flags |= 1 << 0 };
 
-    let status = unsafe {
-        SetProcessMitigationPolicy(
-            ProcessDynamicCodePolicy,
-            std::ptr::from_mut(&mut policy).cast::<c_void>(),
-            std::mem::size_of_val(&policy),
-        )
-    };
+    let status = set_process_mitigation_policy(ProcessDynamicCodePolicy, &policy);
     info!("Set acg mitigation policy status: {:?}", status);
 }

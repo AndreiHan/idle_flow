@@ -5,16 +5,15 @@ use tray::UserEvent;
 
 fn main() {
     #[cfg(debug_assertions)]
-    {
-        let _ = tracing_subscriber::fmt()
-            .compact()
-            .with_max_level(tracing::Level::TRACE)
-            .with_line_number(true)
-            .with_thread_ids(true)
-            .with_thread_names(true)
-            .with_ansi(true)
-            .try_init();
-    }
+    let _ = tracing_subscriber::fmt()
+        .compact()
+        .with_max_level(tracing::Level::TRACE)
+        .with_line_number(true)
+        .with_thread_ids(true)
+        .with_thread_names(true)
+        .with_ansi(true)
+        .try_init();
+
     mitigations::enable_mitigations();
     trace!("Starting Flow application");
     idler_utils::ExecState::start();
@@ -25,24 +24,26 @@ fn main() {
         return;
     };
 
-    let proxy = event_loop.create_proxy();
+    let tray_icon_proxy = event_loop.create_proxy();
     tray_icon::TrayIconEvent::set_event_handler(Some(move |event| {
-        let _ = proxy.send_event(UserEvent::TrayIconEvent(event));
+        let status = tray_icon_proxy.send_event(UserEvent::TrayIconEvent(event));
+        if let Err(err) = status {
+            error!("Failed to send tray icon event: {err:?}");
+        }
     }));
 
-    let proxy = event_loop.create_proxy();
+    let menu_proxy = event_loop.create_proxy();
     tray_icon::menu::MenuEvent::set_event_handler(Some(move |event| {
-        let _ = proxy.send_event(UserEvent::MenuEvent(event));
+        let status = menu_proxy.send_event(UserEvent::MenuEvent(event));
+        if let Err(err) = status {
+            error!("Failed to send menu event: {err:?}");
+        }
     }));
 
-    let sender_proxy = event_loop.create_proxy();
-
-    let mut app = app::Application::new(sender_proxy.clone());
+    let mut app = app::Application::new(event_loop.create_proxy());
     if let Err(err) = event_loop.run_app(&mut app) {
         error!("Run Error: {err:?}");
         return;
     }
-    drop(app);
-    drop(sender_proxy);
     trace!("Flow application exited successfully");
 }

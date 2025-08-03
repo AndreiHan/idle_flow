@@ -1,21 +1,17 @@
 use anyhow::Result;
-use std::{
-    sync::{Arc, RwLock, atomic::AtomicBool},
-    time::{Duration, Instant},
-};
+use std::time::{Duration, Instant};
 use tracing::{error, info, trace, warn};
 use tray::UserEvent;
 use tray_icon::TrayIcon;
 use winit::application::ApplicationHandler;
 
 const TIMEOUT: Duration = Duration::from_secs(5);
-static INIT_DONE: AtomicBool = AtomicBool::new(false);
 
 pub struct Application {
     sender_proxy: winit::event_loop::EventLoopProxy<UserEvent>,
     tray_icon: Option<TrayIcon>,
     last_tray_update: Option<std::time::Instant>,
-    shutdown: Arc<RwLock<Option<app_controller::AppController>>>,
+    shutdown: Option<app_controller::AppController>,
     idle_controller: Option<idler_utils::IdleController>,
 }
 
@@ -26,7 +22,7 @@ impl Application {
             sender_proxy,
             tray_icon: None,
             last_tray_update: None,
-            shutdown: Arc::new(RwLock::new(None)),
+            shutdown: None,
             idle_controller: None,
         }
     }
@@ -53,14 +49,7 @@ impl Application {
 }
 
 impl ApplicationHandler<UserEvent> for Application {
-    fn resumed(&mut self, _event_loop: &winit::event_loop::ActiveEventLoop) {
-        if INIT_DONE.load(std::sync::atomic::Ordering::SeqCst) {
-            return;
-        }
-        self.idle_controller = Some(idler_utils::spawn_idle_thread(None));
-        INIT_DONE.store(true, std::sync::atomic::Ordering::SeqCst);
-        info!("Application resumed, idle controller initialized.");
-    }
+    fn resumed(&mut self, _event_loop: &winit::event_loop::ActiveEventLoop) {}
 
     fn window_event(
         &mut self,
@@ -84,6 +73,7 @@ impl ApplicationHandler<UserEvent> for Application {
             return;
         };
         self.tray_icon = Some(tray_icon);
+        self.idle_controller = Some(idler_utils::spawn_idle_thread(None));
         info!("Tray icon created successfully.");
     }
 
@@ -158,7 +148,7 @@ fn handle_menu_event(
                     info!("Idle controller stopped successfully.");
                 }
             }
-            if let Some(shutdown) = app.shutdown.write().unwrap().take() {
+            if let Some(shutdown) = app.shutdown.take() {
                 info!("Shutdown data taken");
                 let status = shutdown.close(TIMEOUT);
                 info!("Shutdown handler disabled, status: {status:?}");
@@ -169,7 +159,7 @@ fn handle_menu_event(
         data => {
             if data == tray::DISABLE_SHUTDOWN {
                 info!("Disable shutdown menu item clicked, disabling shutdown.");
-                if let Some(shutdown) = app.shutdown.write().unwrap().take() {
+                if let Some(shutdown) = app.shutdown.take() {
                     let status = shutdown.close(TIMEOUT);
                     info!("Shutdown handler disabled, status: {status:?}");
                 } else {
@@ -180,27 +170,22 @@ fn handle_menu_event(
             }
 
             info!("Menu event received: {data}");
-            let shutdown = app.shutdown.read().unwrap();
 
-            if shutdown.is_none() {
-                drop(shutdown);
+            if app.shutdown.is_none() {
                 info!("Initializing shutdown handler.");
-                let mut shutdown = app.shutdown.write().unwrap();
-
                 let controller = app_controller::AppController::new(app.sender_proxy.clone());
 
                 let Ok(()) = controller.send_event(data.to_string()) else {
                     error!("Failed to send shutdown time");
                     return;
                 };
-                *shutdown = Some(controller);
-
+                app.shutdown = Some(controller);
                 info!("Shutdown handler initialized.");
                 app.set_text(format!("Shutdown scheduled for: {data}"));
                 return;
             }
 
-            let Some(shutdown) = &*shutdown else {
+            let Some(shutdown) = app.shutdown.as_ref() else {
                 error!("Shutdown handler is not initialized.");
                 return;
             };

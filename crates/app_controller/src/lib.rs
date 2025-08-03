@@ -117,9 +117,8 @@ impl AppController {
     ///
     /// Returns an error if sending the shutdown signal fails or if joining the close handle fails.
     pub fn close(self, timeout: std::time::Duration) -> Result<()> {
-        self.sender
-            .send("shutdown".to_string())
-            .inspect_err(|e| error!("Failed to send shutdown signal: {e}"))?;
+        let status = self.sender.send("shutdown".to_string());
+        info!("Sent shutdown signal: {status:?}");
         mitigations::join_timeout(self.close_handle, timeout)
     }
 }
