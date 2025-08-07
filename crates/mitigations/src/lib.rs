@@ -1,22 +1,9 @@
 #![cfg(windows)]
-use std::{ffi::c_void, thread::JoinHandle};
+use std::thread::JoinHandle;
 use tracing::{info, trace};
 use windows::{
     Wdk::System::Threading::{NtSetInformationThread, ThreadHideFromDebugger},
-    Win32::System::{
-        SystemServices::{
-            PROCESS_MITIGATION_ASLR_POLICY, PROCESS_MITIGATION_BINARY_SIGNATURE_POLICY,
-            PROCESS_MITIGATION_CHILD_PROCESS_POLICY, PROCESS_MITIGATION_DYNAMIC_CODE_POLICY,
-            PROCESS_MITIGATION_EXTENSION_POINT_DISABLE_POLICY,
-            PROCESS_MITIGATION_FONT_DISABLE_POLICY, PROCESS_MITIGATION_IMAGE_LOAD_POLICY,
-        },
-        Threading::{
-            GetCurrentThread, PROCESS_MITIGATION_POLICY, ProcessASLRPolicy,
-            ProcessChildProcessPolicy, ProcessDynamicCodePolicy,
-            ProcessExtensionPointDisablePolicy, ProcessFontDisablePolicy, ProcessImageLoadPolicy,
-            ProcessSignaturePolicy, ProcessStrictHandleCheckPolicy, SetProcessMitigationPolicy,
-        },
-    },
+    Win32::System::Threading::GetCurrentThread,
 };
 
 /// Joins a thread with a timeout.
@@ -46,21 +33,6 @@ pub fn join_timeout(
 }
 
 #[inline]
-pub fn enable_mitigations() {
-    info!("Enabling mitigations...");
-    hide_current_thread_from_debuggers();
-    prevent_third_party_dll_loading();
-    enable_arbitrary_code_guard();
-    prevent_font_policy();
-    prevent_child_process_creation();
-    prevent_extension_points();
-    enable_aslr();
-    set_image_load_policy();
-    set_handle_check_policy();
-    info!("Mitigations enabled");
-}
-
-#[inline]
 pub fn hide_current_thread_from_debuggers() {
     if cfg!(debug_assertions) {
         info!("[DEBUG-MODE] NOT SETTING anti debug status");
@@ -78,109 +50,51 @@ pub fn hide_current_thread_from_debuggers() {
 }
 
 #[inline]
-fn set_process_mitigation_policy<T>(
-    policy: PROCESS_MITIGATION_POLICY,
-    policy_flags: &T,
-) -> Result<(), anyhow::Error> {
-    unsafe {
-        Ok(SetProcessMitigationPolicy(
-            policy,
-            std::ptr::from_ref(policy_flags).cast::<c_void>(),
-            std::mem::size_of_val(policy_flags),
-        )?)
-    }
-}
+#[allow(clippy::missing_panics_doc)]
+pub fn enable_mitigations() {
+    win_mitigations::binary_signature::BinarySignaturePolicy::default()
+        .build()
+        .expect("Failed to set binary signature policy");
 
-#[inline]
-pub fn prevent_third_party_dll_loading() {
-    info!("Preventing third party dll loading");
-    let mut policy = PROCESS_MITIGATION_BINARY_SIGNATURE_POLICY::default();
-    unsafe { policy.Anonymous.Flags |= 1 << 0 };
+    win_mitigations::font_disable::FontDisablePolicy::default()
+        .set_disable_non_system_fonts(true)
+        .build()
+        .expect("Failed to set font disable policy");
 
-    let status = set_process_mitigation_policy(ProcessSignaturePolicy, &policy);
-    info!("Set process mitigation policy status: {:?}", status);
-}
+    win_mitigations::child_process::ChildProcessPolicy::default()
+        .set_no_child_process_creation(true)
+        .build()
+        .expect("Failed to set child process policy");
 
-#[inline]
-pub fn prevent_font_policy() {
-    info!("Preventing font loading");
-    let mut policy = PROCESS_MITIGATION_FONT_DISABLE_POLICY::default();
-    unsafe { policy.Anonymous.Flags |= 1 << 0 };
+    win_mitigations::extension_point::ExtensionPointPolicy::default()
+        .set_disable_extension_points(true)
+        .build()
+        .expect("Failed to set extension point policy");
 
-    let status = set_process_mitigation_policy(ProcessFontDisablePolicy, &policy);
-    info!("Set font disable policy status: {:?}", status);
-}
+    win_mitigations::aslr::AslrPolicy::default()
+        .set_enable_bottom_up_randomization(true)
+        .set_enable_force_relocate_images(true)
+        .set_enable_high_entropy(true)
+        .build()
+        .expect("Failed to set ASLR policy");
 
-#[inline]
-pub fn prevent_child_process_creation() {
-    info!("Preventing child process creation");
-    let mut policy = PROCESS_MITIGATION_CHILD_PROCESS_POLICY::default();
-    unsafe { policy.Anonymous.Flags |= 1 << 0 };
+    win_mitigations::image_load::ImageLoadPolicy::default()
+        .set_prefer_system32_images(true)
+        .set_no_remote_images(true)
+        .build()
+        .expect("Failed to set image load policy");
 
-    let status = set_process_mitigation_policy(ProcessChildProcessPolicy, &policy);
+    #[cfg(debug_assertions)]
+    win_mitigations::strict_handle::StrictHandlePolicy::default()
+        .set_raise_exception_on_invalid_handle_reference(true)
+        .set_handle_exceptions_permanently_enabled(true)
+        .build()
+        .expect("Failed to set strict handle policy");
 
-    info!("Set child process mitigation policy status: {:?}", status);
-}
+    win_mitigations::dynamic_code::DynamicCodePolicy::default()
+        .set_prohibit_dynamic_code(true)
+        .build()
+        .expect("Failed to set dynamic code policy");
 
-#[inline]
-pub fn prevent_extension_points() {
-    info!("Preventing extension points");
-    let mut policy = PROCESS_MITIGATION_EXTENSION_POINT_DISABLE_POLICY::default();
-    unsafe { policy.Anonymous.Flags |= 1 << 0 };
-
-    let status = set_process_mitigation_policy(ProcessExtensionPointDisablePolicy, &policy);
-    info!("Set extension point disable policy status: {:?}", status);
-}
-
-#[inline]
-pub fn enable_aslr() {
-    info!("Enabling ASLR");
-    let mut policy = PROCESS_MITIGATION_ASLR_POLICY::default();
-    unsafe {
-        policy.Anonymous.Flags |= 1 << 0; // BottomUpRandomization
-        policy.Anonymous.Flags |= 1 << 1; // ForceRelocateImages
-        policy.Anonymous.Flags |= 1 << 2; // Enable high entropy ASLR
-    };
-
-    let status = set_process_mitigation_policy(ProcessASLRPolicy, &policy);
-    info!("Set ASLR policy status: {:?}", status);
-}
-
-#[inline]
-pub fn set_image_load_policy() {
-    info!("Setting image load policy");
-    let mut policy = PROCESS_MITIGATION_IMAGE_LOAD_POLICY::default();
-    unsafe {
-        policy.Anonymous.Flags |= 1 << 0; // NoRemoteImages
-        policy.Anonymous.Flags |= 1 << 2; // Enable high entropy ASLR
-    };
-
-    let status = set_process_mitigation_policy(ProcessImageLoadPolicy, &policy);
-    info!("Set image load policy status: {:?}", status);
-}
-
-#[inline]
-pub fn set_handle_check_policy() {
-    info!("Setting handle check policy");
-    let mut policy = PROCESS_MITIGATION_CHILD_PROCESS_POLICY::default();
-    unsafe {
-        policy.Anonymous.Flags |= 1 << 0; // RaiseExceptionOnInvalidHandleReference 
-        policy.Anonymous.Flags |= 1 << 1; // HandleExceptionsPermanentlyEnabled 
-    };
-
-    let status = set_process_mitigation_policy(ProcessStrictHandleCheckPolicy, &policy);
-    info!("Set strict handle check policy status: {:?}", status);
-}
-
-#[inline]
-pub fn enable_arbitrary_code_guard() {
-    if cfg!(debug_assertions) {
-        info!("[DEBUG-MODE] NOT PREVENTING third party dll loading");
-        return;
-    }
-    let mut policy = PROCESS_MITIGATION_DYNAMIC_CODE_POLICY::default();
-    unsafe { policy.Anonymous.Flags |= 1 << 0 };
-
-    let status = set_process_mitigation_policy(ProcessDynamicCodePolicy, &policy);
-    info!("Set acg mitigation policy status: {:?}", status);
+    info!("Mitigations enabled");
 }

@@ -93,7 +93,7 @@ impl AppController {
     pub fn new(sender_proxy: winit::event_loop::EventLoopProxy<tray::UserEvent>) -> Self {
         let (tx, rx) = crossbeam::channel::bounded(1);
         let handle = schedule_close(sender_proxy, rx);
-        AppController {
+        Self {
             close_handle: handle,
             sender: tx,
         }

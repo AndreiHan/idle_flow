@@ -96,7 +96,7 @@ checksum = "e16d2d3311acee920a9eb8d33b8cbc1787ce4a264e85f964c2404b969bdcd487"
 
 [[package]]
 name = "app"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "anyhow",
  "app_controller",
@@ -109,7 +109,7 @@ dependencies = [
 
 [[package]]
 name = "app_controller"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1101,7 +1101,7 @@ dependencies = [
 
 [[package]]
 name = "idler_utils"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "anyhow",
  "crossbeam",
@@ -1420,10 +1420,11 @@ dependencies = [
 
 [[package]]
 name = "mitigations"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "anyhow",
  "tracing",
+ "win_mitigations",
  "windows",
 ]
 
@@ -2741,7 +2742,7 @@ dependencies = [
 
 [[package]]
 name = "tray"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "chrono",
  "image",
@@ -3067,6 +3068,15 @@ name = "weezl"
 version = "0.1.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a751b3277700db47d3e574514de2eced5e54dc8a5436a3bf7a0b248b2cee16f3"
+
+[[package]]
+name = "win_mitigations"
+version = "0.1.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "22f7f41c061f4f086bd4674d5223cde8f1edec1cbfe17b409941d4a6de1f0f68"
+dependencies = [
+ "windows",
+]
 
 [[package]]
 name = "winapi"

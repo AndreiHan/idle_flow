@@ -9,11 +9,12 @@ rust-version.workspace = true
 anyhow = { workspace = true }
 chrono = { workspace = true }
 crossbeam = { workspace = true }
-mitigations = { workspace = true }
 tracing = { workspace = true }
-tray = { workspace = true }
 tray-icon = { workspace = true }
 winit = { workspace = true }
+
+mitigations = { workspace = true }
+tray = { workspace = true }
 
 [lints]
 workspace = true

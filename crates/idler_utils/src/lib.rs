@@ -29,7 +29,7 @@ const DEFAULT_MAX_IDLE: u64 = 5;
 #[cfg(not(debug_assertions))]
 const DEFAULT_MAX_IDLE: u64 = 60;
 
-fn mouse_move_input() -> INPUT {
+const fn mouse_move_input() -> INPUT {
     INPUT {
         r#type: INPUT_MOUSE,
         Anonymous: INPUT_0 {
@@ -55,17 +55,17 @@ pub enum SafeKey {
 
 impl SafeKey {
     #[must_use]
-    pub fn to_virtual_key(self) -> VIRTUAL_KEY {
+    pub const fn to_virtual_key(self) -> VIRTUAL_KEY {
         match self {
-            SafeKey::Shift => VK_SHIFT,
-            SafeKey::Control => VK_CONTROL,
-            SafeKey::Alt => VK_MENU,
+            Self::Shift => VK_SHIFT,
+            Self::Control => VK_CONTROL,
+            Self::Alt => VK_MENU,
         }
     }
 
     /// Returns all safe keys
     #[must_use]
-    pub fn all() -> &'static [SafeKey] {
+    pub fn all() -> &'static [Self] {
         static SAFE_KEYS: [SafeKey; 3] = [SafeKey::Shift, SafeKey::Control, SafeKey::Alt];
         &SAFE_KEYS
     }
@@ -74,7 +74,7 @@ impl SafeKey {
 /// Generates a key press/release INPUT pair for a given `SafeKey`.
 #[must_use]
 #[inline]
-pub fn make_key_input(key: SafeKey) -> [INPUT; 2] {
+pub const fn make_key_input(key: SafeKey) -> [INPUT; 2] {
     let vk = key.to_virtual_key();
     [
         INPUT {

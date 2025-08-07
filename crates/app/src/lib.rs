@@ -17,8 +17,8 @@ pub struct Application {
 
 impl Application {
     #[must_use]
-    pub fn new(sender_proxy: winit::event_loop::EventLoopProxy<UserEvent>) -> Application {
-        Application {
+    pub const fn new(sender_proxy: winit::event_loop::EventLoopProxy<UserEvent>) -> Self {
+        Self {
             sender_proxy,
             tray_icon: None,
             last_tray_update: None,

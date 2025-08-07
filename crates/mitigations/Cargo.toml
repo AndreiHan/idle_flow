@@ -12,11 +12,9 @@ targets = []
 [dependencies]
 anyhow = { workspace = true }
 tracing = { workspace = true }
+win_mitigations = { workspace = true }
 windows = { workspace = true, features = [
-  "Win32_Foundation",
-  "Win32_System_LibraryLoader",
   "Win32_System_Threading",
-  "Win32_System_SystemServices",
   "Wdk_System_Threading",
 ] }
 
