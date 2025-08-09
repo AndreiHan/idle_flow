@@ -14,8 +14,17 @@ fn main() {
         .with_ansi(true)
         .try_init();
 
+    trace!("Initializing Flow application, pid: {}", std::process::id());
     mitigations::enable_mitigations();
+
     trace!("Starting Flow application");
+    if !std::env::args().any(|arg| arg == "--restart") {
+        trace!("Restarting Flow application");
+        if mitigations::restart_self().is_err() {
+            error!("Failed to restart Flow application");
+        }
+        std::process::exit(0);
+    }
     idler_utils::ExecState::start();
 
     let Ok(event_loop) = winit::event_loop::EventLoop::<UserEvent>::with_user_event().build()
@@ -46,4 +55,8 @@ fn main() {
         return;
     }
     trace!("Flow application exited successfully");
+    #[cfg(debug_assertions)]
+    {
+        std::process::exit(0);
+    }
 }

@@ -16,6 +16,10 @@ win_mitigations = { workspace = true }
 windows = { workspace = true, features = [
   "Win32_System_Threading",
   "Wdk_System_Threading",
+  "Win32_Foundation",
+  "Win32_System_Memory",
+  "Win32_Security",
+  "Win32_System_Environment"
 ] }
 
 [lints]

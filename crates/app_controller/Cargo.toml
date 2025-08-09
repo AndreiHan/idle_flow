@@ -7,7 +7,7 @@ rust-version.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
-chrono = { workspace = true }
+chrono = { workspace = true, features = ["std"] }
 crossbeam = { workspace = true }
 tracing = { workspace = true }
 tray-icon = { workspace = true }
