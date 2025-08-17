@@ -5,8 +5,12 @@ rust-version.workspace = true
 authors.workspace = true
 version.workspace = true
 
-[dependencies]
-chrono = { workspace = true, features = ["std"] }
+[package.metadata.docs.rs]
+default-target = "x86_64-pc-windows-msvc"
+targets = []
+
+[target.'cfg(windows)'.dependencies]
+chrono = { workspace = true, features = ["std", "clock"] }
 image = { workspace = true, features = ["png"] }
 tracing = { workspace = true }
 tray-icon = { workspace = true }

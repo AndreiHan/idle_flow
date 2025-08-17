@@ -9,15 +9,15 @@ version.workspace = true
 default-target = "x86_64-pc-windows-msvc"
 targets = []
 
-[dependencies]
+[target.'cfg(windows)'.dependencies]
 anyhow = { workspace = true }
 tracing = { workspace = true }
-tray = { workspace = true }
 tray-icon = { workspace = true }
 winit = { workspace = true }
 
 app_controller = { workspace = true }
 idler_utils = { workspace = true }
+tray = { workspace = true }
 
 [lints]
 workspace = true

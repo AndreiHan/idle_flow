@@ -4,4 +4,7 @@ rustflags = [
     "--cfg", "windows_slim_errors", 
     "-C", "control-flow-guard",
     "-C", "target-feature=-crt-static",
+    "-C", "link-arg=/DYNAMICBASE",
+    "-C", "link-arg=/HIGHENTROPYVA",
+    "-C", "link-arg=/sdl",
 ]

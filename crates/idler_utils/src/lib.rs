@@ -1,5 +1,5 @@
 #![cfg(windows)]
-use anyhow::{Result, anyhow};
+use anyhow::Result;
 use crossbeam::channel::{Receiver, Sender, bounded};
 use rand::{Rng, rng};
 use tracing::{debug, error, info};
@@ -25,7 +25,6 @@ use windows::{
 /// Default maximum idle time in seconds
 #[cfg(debug_assertions)]
 const DEFAULT_MAX_IDLE: u64 = 5;
-
 #[cfg(not(debug_assertions))]
 const DEFAULT_MAX_IDLE: u64 = 60;
 
@@ -152,7 +151,7 @@ fn send_key_input() -> Result<()> {
         } else {
             let err = unsafe { GetLastError() };
             error!("Failed to send KeyboardInput {:?}, last err {:?}", key, err);
-            return Err(anyhow!("{:?}", err));
+            return Err(anyhow::anyhow!("{:?}", err));
         }
     }
     Ok(())
@@ -167,7 +166,7 @@ fn send_mouse_input() -> Result<()> {
     } else {
         let err = unsafe { GetLastError() };
         error!("Failed to send MouseInput, last err {:?}", err);
-        Err(anyhow!("{:?}", err))
+        Err(anyhow::anyhow!("{:?}", err))
     }
 }
 
@@ -256,7 +255,7 @@ impl IdleController {
         info!("Stop signal sent to idle thread, waiting for it to finish");
         if let Err(e) = mitigations::join_timeout(self.thread_handle, timeout) {
             error!("Idle thread join failed: {:?}", e);
-            return Err(anyhow!("Idle thread join failed"));
+            return Err(anyhow::anyhow!("Idle thread join failed"));
         }
         info!("Thread join successful");
         info!("Idle thread stopped successfully");
@@ -270,6 +269,7 @@ pub fn spawn_idle_thread(max_idle: Option<u64>) -> IdleController {
     let idle = max_idle.unwrap_or(DEFAULT_MAX_IDLE);
     let (stop_tx, stop_rx) = bounded::<()>(1);
     let thread_handle = std::thread::spawn(move || {
+        mitigations::set_priority(mitigations::Priority::Lowest);
         mitigations::hide_current_thread_from_debuggers();
         info!("Starting idle thread after {idle} seconds delay");
         if stop_rx

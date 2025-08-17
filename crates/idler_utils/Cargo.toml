@@ -9,10 +9,10 @@ rust-version.workspace = true
 default-target = "x86_64-pc-windows-msvc"
 targets = []
 
-[dependencies]
+[target.'cfg(windows)'.dependencies]
 anyhow = { workspace = true }
-crossbeam = { workspace = true }
-rand = { workspace = true }
+crossbeam = { workspace = true, features = ["std"] }
+rand = { workspace = true, features = ["thread_rng"] }
 tracing = { workspace = true }
 windows = { workspace = true, features = [
   "Win32_Foundation",

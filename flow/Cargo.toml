@@ -1,8 +1,10 @@
 [package]
 name = "flow"
-version = "0.1.0"
-edition = "2024"
 build = "build.rs"
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+version.workspace = true
 
 [package.metadata.tauri-winres]
 LegalCopyright = "IF©2025"
@@ -15,18 +17,21 @@ ignored = ["tauri-winres"]
 default-target = "x86_64-pc-windows-msvc"
 targets = []
 
-[dependencies]
-idler_utils = { workspace = true }
-mitigations = { workspace = true }
+[target.'cfg(windows)'.dependencies]
 tracing = { workspace = true }
-tracing-subscriber = { workspace = true, features = ["tracing-log"] }
-tray-icon = { workspace = true }
+tracing-subscriber = { workspace = true, features = [
+    "fmt",
+    "std",
+] }
 winit = { workspace = true }
 
 app = { workspace = true }
+idler_utils = { workspace = true }
+mitigations = { workspace = true }
 tray = { workspace = true }
+tray-icon = { workspace = true }
 
-[build-dependencies]
+[target.'cfg(windows)'.build-dependencies]
 tauri-winres = { workspace = true }
 
 [lints]

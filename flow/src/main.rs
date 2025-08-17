@@ -1,7 +1,6 @@
 #![cfg(windows)]
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 use tracing::{error, trace};
-use tray::UserEvent;
 
 fn main() {
     #[cfg(debug_assertions)]
@@ -27,7 +26,7 @@ fn main() {
     }
     idler_utils::ExecState::start();
 
-    let Ok(event_loop) = winit::event_loop::EventLoop::<UserEvent>::with_user_event().build()
+    let Ok(event_loop) = winit::event_loop::EventLoop::<tray::UserEvent>::with_user_event().build()
     else {
         error!("Failed to create event loop");
         return;
@@ -35,7 +34,7 @@ fn main() {
 
     let tray_icon_proxy = event_loop.create_proxy();
     tray_icon::TrayIconEvent::set_event_handler(Some(move |event| {
-        let status = tray_icon_proxy.send_event(UserEvent::TrayIconEvent(event));
+        let status = tray_icon_proxy.send_event(tray::UserEvent::TrayIconEvent(event));
         if let Err(err) = status {
             error!("Failed to send tray icon event: {err:?}");
         }
@@ -43,11 +42,12 @@ fn main() {
 
     let menu_proxy = event_loop.create_proxy();
     tray_icon::menu::MenuEvent::set_event_handler(Some(move |event| {
-        let status = menu_proxy.send_event(UserEvent::MenuEvent(event));
+        let status = menu_proxy.send_event(tray::UserEvent::MenuEvent(event));
         if let Err(err) = status {
             error!("Failed to send menu event: {err:?}");
         }
     }));
+    mitigations::set_priority(mitigations::Priority::Lowest);
 
     let mut app = app::Application::new(event_loop.create_proxy());
     if let Err(err) = event_loop.run_app(&mut app) {

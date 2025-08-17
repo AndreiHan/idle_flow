@@ -1,5 +1,4 @@
 #![cfg(windows)]
-use std::{ffi::c_void, thread::JoinHandle};
 use tracing::{error, info, trace, warn};
 use windows::{
     Wdk::System::Threading::{NtSetInformationThread, ThreadHideFromDebugger},
@@ -11,7 +10,10 @@ use windows::{
                 CreateProcessW, EXTENDED_STARTUPINFO_PRESENT, GetCurrentThread,
                 InitializeProcThreadAttributeList, LPPROC_THREAD_ATTRIBUTE_LIST,
                 PROC_THREAD_ATTRIBUTE_MITIGATION_POLICY, PROCESS_INFORMATION, STARTUPINFOEXW,
-                STARTUPINFOW, STARTUPINFOW_FLAGS, UpdateProcThreadAttribute,
+                STARTUPINFOW, STARTUPINFOW_FLAGS, SetThreadPriority, THREAD_PRIORITY,
+                THREAD_PRIORITY_ABOVE_NORMAL, THREAD_PRIORITY_BELOW_NORMAL,
+                THREAD_PRIORITY_HIGHEST, THREAD_PRIORITY_LOWEST, THREAD_PRIORITY_NORMAL,
+                THREAD_PRIORITY_TIME_CRITICAL, UpdateProcThreadAttribute,
             },
         },
     },
@@ -42,9 +44,9 @@ pub fn clean_env() {
 
 #[inline]
 fn reset_current_dir() {
-    let binding = std::env::current_exe().unwrap();
-    let parent_dir = binding.parent().unwrap();
-    std::env::set_current_dir(parent_dir).unwrap();
+    let binding = std::env::current_exe().expect("Failed to get current exe path");
+    let parent_dir = binding.parent().expect("Failed to get parent directory");
+    std::env::set_current_dir(parent_dir).expect("Failed to set current directory");
     info!("Current directory reset to: {}", parent_dir.display());
 }
 
@@ -81,7 +83,7 @@ unsafe fn get_dll_attributes() -> anyhow::Result<Owned<LPPROC_THREAD_ATTRIBUTE_L
             *attributes,
             0,
             PROC_THREAD_ATTRIBUTE_MITIGATION_POLICY as usize,
-            Some(std::ptr::from_ref(&policy).cast::<c_void>()),
+            Some(std::ptr::from_ref(&policy).cast::<std::ffi::c_void>()),
             std::mem::size_of::<u64>(),
             None,
             None,
@@ -159,7 +161,7 @@ pub fn restart_self() -> Result<(), anyhow::Error> {
 /// Returns an error if the thread join fails or times out.
 #[inline]
 pub fn join_timeout(
-    thread_handle: JoinHandle<()>,
+    thread_handle: std::thread::JoinHandle<()>,
     timeout: std::time::Duration,
 ) -> Result<(), anyhow::Error> {
     let timeout = std::time::Instant::now() + timeout;
@@ -187,6 +189,37 @@ pub fn enable_mitigations() {
     reset_current_dir();
     set_policy_mitigation();
     info!("Mitigations enabled");
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Priority {
+    Lowest,
+    BelowNormal,
+    Normal,
+    AboveNormal,
+    High,
+    TimeCritical,
+}
+
+impl Priority {
+    fn to_thread_priority(self) -> THREAD_PRIORITY {
+        match self {
+            Priority::Lowest => THREAD_PRIORITY_LOWEST,
+            Priority::BelowNormal => THREAD_PRIORITY_BELOW_NORMAL,
+            Priority::Normal => THREAD_PRIORITY_NORMAL,
+            Priority::AboveNormal => THREAD_PRIORITY_ABOVE_NORMAL,
+            Priority::High => THREAD_PRIORITY_HIGHEST,
+            Priority::TimeCritical => THREAD_PRIORITY_TIME_CRITICAL,
+        }
+    }
+}
+
+#[inline]
+pub fn set_priority(priority: Priority) {
+    unsafe {
+        let status = SetThreadPriority(GetCurrentThread(), priority.to_thread_priority());
+        trace!("Set thread priority to {priority:?}: {status:?}");
+    }
 }
 
 #[inline]

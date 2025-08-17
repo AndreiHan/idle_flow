@@ -1,9 +1,6 @@
+#![cfg(windows)]
 use anyhow::Result;
 use chrono::{Local, NaiveTime, TimeDelta};
-use std::{
-    thread::{self, JoinHandle},
-    time::Duration,
-};
 use tracing::{error, info, trace};
 
 fn get_time(time: &str) -> Option<NaiveTime> {
@@ -23,7 +20,7 @@ fn get_status(status: &str) -> Option<Status> {
     }
 }
 
-fn get_diff(received_time: NaiveTime) -> Option<Duration> {
+fn get_diff(received_time: NaiveTime) -> Option<std::time::Duration> {
     let now = Local::now().time();
     let diff = if let Ok(dur) = received_time.signed_duration_since(now).to_std() {
         dur
@@ -49,7 +46,7 @@ fn get_diff(received_time: NaiveTime) -> Option<Duration> {
 fn check_close_condition(
     sender_proxy: &winit::event_loop::EventLoopProxy<tray::UserEvent>,
     data: &str,
-) -> Option<Duration> {
+) -> Option<std::time::Duration> {
     trace!("Received time: {data:?}");
     let Some(status) = get_status(data) else {
         info!("Received non time value, {data}. Returning");
@@ -80,11 +77,11 @@ fn check_close_condition(
         return None;
     }
     info!("Scheduling shutdown in {diff:?}");
-    Some(Duration::from_secs(diff.as_secs()))
+    Some(std::time::Duration::from_secs(diff.as_secs()))
 }
 
 pub struct AppController {
-    close_handle: JoinHandle<()>,
+    close_handle: std::thread::JoinHandle<()>,
     sender: crossbeam::channel::Sender<String>,
 }
 
@@ -126,9 +123,10 @@ impl AppController {
 fn schedule_close(
     proxy: winit::event_loop::EventLoopProxy<tray::UserEvent>,
     rx: crossbeam::channel::Receiver<String>,
-) -> JoinHandle<()> {
-    thread::spawn(move || {
+) -> std::thread::JoinHandle<()> {
+    std::thread::spawn(move || {
         info!("Starting shutdown handler thread");
+        mitigations::set_priority(mitigations::Priority::BelowNormal);
         mitigations::hide_current_thread_from_debuggers();
         let Ok(data) = rx.recv() else {
             error!("Failed to receive data");

@@ -1,15 +1,13 @@
+#![cfg(windows)]
 use anyhow::Result;
-use std::time::{Duration, Instant};
 use tracing::{error, info, trace, warn};
-use tray::UserEvent;
-use tray_icon::TrayIcon;
 use winit::application::ApplicationHandler;
 
-const TIMEOUT: Duration = Duration::from_secs(5);
+const TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
 
 pub struct Application {
-    sender_proxy: winit::event_loop::EventLoopProxy<UserEvent>,
-    tray_icon: Option<TrayIcon>,
+    sender_proxy: winit::event_loop::EventLoopProxy<tray::UserEvent>,
+    tray_icon: Option<tray_icon::TrayIcon>,
     last_tray_update: Option<std::time::Instant>,
     shutdown: Option<app_controller::AppController>,
     idle_controller: Option<idler_utils::IdleController>,
@@ -17,7 +15,7 @@ pub struct Application {
 
 impl Application {
     #[must_use]
-    pub const fn new(sender_proxy: winit::event_loop::EventLoopProxy<UserEvent>) -> Self {
+    pub const fn new(sender_proxy: winit::event_loop::EventLoopProxy<tray::UserEvent>) -> Self {
         Self {
             sender_proxy,
             tray_icon: None,
@@ -27,7 +25,7 @@ impl Application {
         }
     }
 
-    fn new_tray_icon() -> Result<TrayIcon> {
+    fn new_tray_icon() -> Result<tray_icon::TrayIcon> {
         let Ok(tray) = tray::get_tray() else {
             error!("Failed to create tray icon");
             return Err(anyhow::anyhow!("Failed to create tray icon"));
@@ -48,7 +46,7 @@ impl Application {
     }
 }
 
-impl ApplicationHandler<UserEvent> for Application {
+impl ApplicationHandler<tray::UserEvent> for Application {
     fn resumed(&mut self, _event_loop: &winit::event_loop::ActiveEventLoop) {}
 
     fn window_event(
@@ -77,12 +75,16 @@ impl ApplicationHandler<UserEvent> for Application {
         info!("Tray icon created successfully.");
     }
 
-    fn user_event(&mut self, event_loop: &winit::event_loop::ActiveEventLoop, event: UserEvent) {
+    fn user_event(
+        &mut self,
+        event_loop: &winit::event_loop::ActiveEventLoop,
+        event: tray::UserEvent,
+    ) {
         match event {
-            UserEvent::TrayIconEvent(tray_event) => {
+            tray::UserEvent::TrayIconEvent(tray_event) => {
                 handle_tray_icon_event(self, event_loop, &tray_event);
             }
-            UserEvent::MenuEvent(menu_event) => {
+            tray::UserEvent::MenuEvent(menu_event) => {
                 handle_menu_event(self, event_loop, &menu_event);
             }
         }
@@ -98,8 +100,8 @@ fn handle_tray_icon_event(
         return;
     }
 
-    let now = Instant::now();
-    let debounce = Duration::from_secs(120);
+    let now = std::time::Instant::now();
+    let debounce = std::time::Duration::from_secs(120);
     if let Some(last) = app.last_tray_update {
         let elapsed = now.duration_since(last);
         if elapsed < debounce {
