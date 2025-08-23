@@ -22,7 +22,7 @@ fn main() {
         if mitigations::restart_self().is_err() {
             error!("Failed to restart Flow application");
         }
-        std::process::exit(0);
+        return;
     }
     idler_utils::ExecState::start();
 
@@ -55,8 +55,4 @@ fn main() {
         return;
     }
     trace!("Flow application exited successfully");
-    #[cfg(debug_assertions)]
-    {
-        std::process::exit(0);
-    }
 }

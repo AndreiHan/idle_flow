@@ -12,6 +12,8 @@ targets = []
 [target.'cfg(windows)'.dependencies]
 anyhow = { workspace = true }
 crossbeam = { workspace = true, features = ["std"] }
+
+mitigations = { workspace = true }
 rand = { workspace = true, features = ["thread_rng"] }
 tracing = { workspace = true }
 windows = { workspace = true, features = [
@@ -20,8 +22,6 @@ windows = { workspace = true, features = [
   "Win32_UI_Input_KeyboardAndMouse",
   "Win32_System_SystemInformation",
 ] }
-
-mitigations = { workspace = true }
 
 [lints]
 workspace = true

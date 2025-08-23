@@ -75,7 +75,7 @@ pub fn next_ten_minutes() -> Vec<NaiveTime> {
             hour = (hour + 1) % 24;
         }
     }
-    trace!("Next ten minutes: {:?}", times);
+    trace!("Next ten minutes: {times:?}");
     times
 }
 

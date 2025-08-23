@@ -37,7 +37,7 @@ pub fn clean_env() {
     } else {
         warn!("Remaining environment variables:");
         for (key, val) in env {
-            info!("{}={}", key, val);
+            info!("{key}={val}");
         }
     }
 }

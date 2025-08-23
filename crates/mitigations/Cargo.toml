@@ -12,6 +12,8 @@ targets = []
 [target.'cfg(windows)'.dependencies]
 anyhow = { workspace = true }
 tracing = { workspace = true }
+
+win_mitigations = { workspace = true }
 windows = { workspace = true, features = [
   "Win32_System_Threading",
   "Wdk_System_Threading",
@@ -20,8 +22,6 @@ windows = { workspace = true, features = [
   "Win32_Security",
   "Win32_System_Environment",
 ] }
-
-win_mitigations = { workspace = true }
 
 [lints]
 workspace = true

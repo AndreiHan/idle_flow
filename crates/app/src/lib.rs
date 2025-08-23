@@ -145,17 +145,13 @@ fn handle_menu_event(
         return;
     }
     if data == tray::DISABLE_SHUTDOWN {
-        handle_disable_shutdown(app, event_loop);
+        handle_disable_shutdown(app);
         return;
     }
-    handle_shutdown_time(app, event_loop, data);
+    handle_shutdown_time(app, data);
 }
 
-fn handle_shutdown_time(
-    app: &mut Application,
-    _event_loop: &winit::event_loop::ActiveEventLoop,
-    data: &str,
-) {
+fn handle_shutdown_time(app: &mut Application, data: &str) {
     info!("Received shutdown time: {data}");
     if app.shutdown.is_none() {
         info!("Initializing shutdown handler.");
@@ -205,10 +201,7 @@ fn handle_quit(app: &mut Application, event_loop: &winit::event_loop::ActiveEven
     info!("Exiting after cleanup.");
 }
 
-fn handle_disable_shutdown(
-    app: &mut Application,
-    _event_loop: &winit::event_loop::ActiveEventLoop,
-) {
+fn handle_disable_shutdown(app: &mut Application) {
     info!("Disable shutdown menu item clicked, disabling shutdown.");
     if let Some(shutdown) = app.shutdown.take() {
         let status = shutdown.close(TIMEOUT);

@@ -118,21 +118,21 @@ impl ExecState {
         unsafe {
             let state =
                 SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED);
-            info!("{:?} - ENABLE", state);
+            info!("{state:?} - ENABLE");
         }
     }
     #[inline]
     pub fn stop() {
         unsafe {
             let state = SetThreadExecutionState(ES_CONTINUOUS);
-            info!("{:?} - DISABLE", state);
+            info!("{state:?} - DISABLE");
         }
     }
 
     pub fn user_present() {
         unsafe {
             let state = SetThreadExecutionState(ES_USER_PRESENT);
-            info!("{:?} - USER_PRESENT", state);
+            info!("{state:?} - USER_PRESENT");
         }
     }
 }
@@ -147,11 +147,11 @@ fn send_key_input() -> Result<()> {
     for item in key_pair {
         let value = unsafe { SendInput(&[item], size) };
         if value == 1 {
-            info!("Sent KeyboardInput: {:?}", key);
+            info!("Sent KeyboardInput: {key:?}");
         } else {
             let err = unsafe { GetLastError() };
-            error!("Failed to send KeyboardInput {:?}, last err {:?}", key, err);
-            return Err(anyhow::anyhow!("{:?}", err));
+            error!("Failed to send KeyboardInput {key:?}, last err {err:?}");
+            return Err(anyhow::anyhow!("{err:?}"));
         }
     }
     Ok(())
@@ -165,8 +165,8 @@ fn send_mouse_input() -> Result<()> {
         Ok(())
     } else {
         let err = unsafe { GetLastError() };
-        error!("Failed to send MouseInput, last err {:?}", err);
-        Err(anyhow::anyhow!("{:?}", err))
+        error!("Failed to send MouseInput, last err {err:?}");
+        Err(anyhow::anyhow!("{err:?}"))
     }
 }
 
@@ -183,7 +183,7 @@ fn send_random_input() -> Result<()> {
 fn get_last_input() -> Option<u64> {
     let mut last_input = LASTINPUTINFO {
         cbSize: u32::try_from(core::mem::size_of::<LASTINPUTINFO>())
-            .inspect_err(|e| error!("Failed to get size of LASTINPUTINFO: {:?}", e))
+            .inspect_err(|e| error!("Failed to get size of LASTINPUTINFO: {e:?}"))
             .ok()?,
         ..Default::default()
     };
@@ -211,7 +211,7 @@ fn idle_loop(max_idle: u64, stop_rx: &Receiver<()>) -> Result<()> {
         if idle_time >= (max_idle * 94 / 100) {
             ExecState::user_present();
             match send_random_input() {
-                Ok(()) => info!("Simulated input after {}s idle", idle_time),
+                Ok(()) => info!("Simulated input after {idle_time}s idle"),
                 Err(e) => error!("Failed to send input: {e:?}"),
             }
             let sleep_secs = rng.random_range(5..=15);
@@ -223,7 +223,7 @@ fn idle_loop(max_idle: u64, stop_rx: &Receiver<()>) -> Result<()> {
                 break;
             }
         } else {
-            info!("Idle time: {}s, waiting for input", idle_time);
+            info!("Idle time: {idle_time}s, waiting for input");
             let sleep_ms = rng.random_range(
                 u64::try_from(sleep_base.as_millis() / 2)?..=u64::try_from(sleep_base.as_millis())?,
             );
@@ -250,11 +250,11 @@ impl IdleController {
     /// Returns an error if the stop signal fails to send.
     pub fn stop(self, timeout: core::time::Duration) -> Result<()> {
         let status = self.stop_tx.send(());
-        info!("Stop signal sent to idle thread: {:?}", status);
+        info!("Stop signal sent to idle thread: {status:?}");
         drop(self.stop_tx);
         info!("Stop signal sent to idle thread, waiting for it to finish");
         if let Err(e) = mitigations::join_timeout(self.thread_handle, timeout) {
-            error!("Idle thread join failed: {:?}", e);
+            error!("Idle thread join failed: {e:?}");
             return Err(anyhow::anyhow!("Idle thread join failed"));
         }
         info!("Thread join successful");
