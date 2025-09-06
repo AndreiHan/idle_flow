@@ -6,6 +6,7 @@ fn main() {
     #[cfg(debug_assertions)]
     let _ = tracing_subscriber::fmt()
         .compact()
+        .log_internal_errors(true)
         .with_max_level(tracing::Level::TRACE)
         .with_line_number(true)
         .with_thread_ids(true)

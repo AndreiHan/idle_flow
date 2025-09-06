@@ -3,6 +3,7 @@ use anyhow::Result;
 use chrono::{Local, NaiveTime, TimeDelta};
 use tracing::{error, info, trace};
 
+#[inline]
 fn get_time(time: &str) -> Option<NaiveTime> {
     NaiveTime::parse_from_str(time, "%H:%M").ok()
 }
@@ -12,6 +13,7 @@ enum Status {
     Shutdown,
 }
 
+#[inline]
 fn get_status(status: &str) -> Option<Status> {
     match status {
         "shutdown" => Some(Status::Shutdown),
@@ -20,6 +22,7 @@ fn get_status(status: &str) -> Option<Status> {
     }
 }
 
+#[inline]
 fn get_diff(received_time: NaiveTime) -> Option<std::time::Duration> {
     let now = Local::now().time();
     let diff = if let Ok(dur) = received_time.signed_duration_since(now).to_std() {
@@ -43,6 +46,7 @@ fn get_diff(received_time: NaiveTime) -> Option<std::time::Duration> {
     Some(diff)
 }
 
+#[inline]
 fn check_close_condition(
     sender_proxy: &winit::event_loop::EventLoopProxy<tray::UserEvent>,
     data: &str,
@@ -120,6 +124,7 @@ impl AppController {
     }
 }
 
+#[inline]
 fn schedule_close(
     proxy: winit::event_loop::EventLoopProxy<tray::UserEvent>,
     rx: crossbeam::channel::Receiver<String>,

@@ -1,6 +1,7 @@
 #![cfg(windows)]
+use std::sync::{Arc, Condvar, Mutex};
+
 use anyhow::Result;
-use crossbeam::channel::{Receiver, Sender, bounded};
 use rand::{Rng, rng};
 use tracing::{debug, error, info};
 use windows::{
@@ -22,12 +23,73 @@ use windows::{
     core::BOOL,
 };
 
+#[allow(clippy::cast_possible_wrap)]
+#[allow(clippy::cast_possible_truncation)]
+const SIZE_OF_INPUT: i32 = std::mem::size_of::<INPUT>() as i32;
+#[allow(clippy::cast_possible_wrap)]
+#[allow(clippy::cast_possible_truncation)]
+const SIZE_OF_LASTINPUTINFO: u32 = std::mem::size_of::<LASTINPUTINFO>() as u32;
+
 /// Default maximum idle time in seconds
 #[cfg(debug_assertions)]
-const DEFAULT_MAX_IDLE: u64 = 5;
+const DEFAULT_MAX_IDLE: u64 = 10;
 #[cfg(not(debug_assertions))]
 const DEFAULT_MAX_IDLE: u64 = 60;
 
+#[derive(Debug)]
+pub struct ExitCondition {
+    condvar: Condvar,
+    mutex: Mutex<bool>,
+}
+
+impl Default for ExitCondition {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl ExitCondition {
+    #[must_use]
+    fn new() -> Self {
+        Self {
+            condvar: Condvar::new(),
+            mutex: Mutex::new(false),
+        }
+    }
+
+    #[inline]
+    fn start_exit(&self) {
+        info!("Exit condition triggered");
+        let mut guard = self.mutex.lock().unwrap();
+        *guard = true;
+        self.condvar.notify_all();
+    }
+
+    #[inline]
+    fn is_exit(&self) -> bool {
+        *self.mutex.lock().unwrap()
+    }
+
+    #[inline]
+    fn wait_for_exit(&self, dur: core::time::Duration) -> bool {
+        let Ok(res) = self
+            .condvar
+            .wait_timeout_while(self.mutex.lock().unwrap(), dur, |exit| !*exit)
+            .map_err(|e| anyhow::anyhow!("Condvar wait failed: {e:?}"))
+        else {
+            return true;
+        };
+
+        if res.1.timed_out() {
+            info!("Wait timed out after {:?}", dur);
+            return false;
+        }
+        info!("Exit condition met");
+        true
+    }
+}
+
+#[inline]
 const fn mouse_move_input() -> INPUT {
     INPUT {
         r#type: INPUT_MOUSE,
@@ -54,6 +116,7 @@ pub enum SafeKey {
 
 impl SafeKey {
     #[must_use]
+    #[inline]
     pub const fn to_virtual_key(self) -> VIRTUAL_KEY {
         match self {
             Self::Shift => VK_SHIFT,
@@ -64,6 +127,7 @@ impl SafeKey {
 
     /// Returns all safe keys
     #[must_use]
+    #[inline]
     pub fn all() -> &'static [Self] {
         static SAFE_KEYS: [SafeKey; 3] = [SafeKey::Shift, SafeKey::Control, SafeKey::Alt];
         &SAFE_KEYS
@@ -129,6 +193,7 @@ impl ExecState {
         }
     }
 
+    #[inline]
     pub fn user_present() {
         unsafe {
             let state = SetThreadExecutionState(ES_USER_PRESENT);
@@ -138,14 +203,14 @@ impl ExecState {
 }
 
 /// Sends a random safe key input from the provided list of virtual key codes.
+#[inline]
 fn send_key_input() -> Result<()> {
     let mut rng = rng();
     let safe_keys = SafeKey::all();
     let key = safe_keys[rng.random_range(0..safe_keys.len())];
     let key_pair = make_key_input(key);
-    let size = i32::try_from(core::mem::size_of::<INPUT>())?;
     for item in key_pair {
-        let value = unsafe { SendInput(&[item], size) };
+        let value = unsafe { SendInput(&[item], SIZE_OF_INPUT) };
         if value == 1 {
             info!("Sent KeyboardInput: {key:?}");
         } else {
@@ -157,10 +222,10 @@ fn send_key_input() -> Result<()> {
     Ok(())
 }
 
+#[inline]
 fn send_mouse_input() -> Result<()> {
     let input = mouse_move_input();
-    let size = i32::try_from(core::mem::size_of::<INPUT>())?;
-    if unsafe { SendInput(&[input], size) } == 1 {
+    if unsafe { SendInput(&[input], SIZE_OF_INPUT) } == 1 {
         info!("Sent MouseInput");
         Ok(())
     } else {
@@ -171,6 +236,7 @@ fn send_mouse_input() -> Result<()> {
 }
 
 /// Sends either a mouse or random safe key input.
+#[inline]
 fn send_random_input() -> Result<()> {
     let mut rng = rng();
     if rng.random_bool(0.5) {
@@ -180,11 +246,10 @@ fn send_random_input() -> Result<()> {
     }
 }
 
+#[inline]
 fn get_last_input() -> Option<u64> {
     let mut last_input = LASTINPUTINFO {
-        cbSize: u32::try_from(core::mem::size_of::<LASTINPUTINFO>())
-            .inspect_err(|e| error!("Failed to get size of LASTINPUTINFO: {e:?}"))
-            .ok()?,
+        cbSize: SIZE_OF_LASTINPUTINFO,
         ..Default::default()
     };
     let total_ticks;
@@ -198,15 +263,18 @@ fn get_last_input() -> Option<u64> {
     Some(core::time::Duration::from_millis(total_ticks - u64::from(last_input.dwTime)).as_secs())
 }
 
-fn idle_loop(max_idle: u64, stop_rx: &Receiver<()>) -> Result<()> {
+#[inline]
+fn idle_loop(max_idle: u64, exit_condvar: &Arc<ExitCondition>) -> Result<()> {
     debug!("Start idle time thread");
     let mut rng = rng();
-    let sleep_base = core::time::Duration::from_secs(max_idle * 94 / 100);
+    let sleep_base =
+        u64::try_from(core::time::Duration::from_secs(max_idle * 94 / 100).as_millis())?;
     loop {
-        if stop_rx.try_recv().is_ok() {
-            info!("Idle loop shutdown requested (channel), 1");
+        if exit_condvar.is_exit() {
+            info!("Idle loop shutdown requested (condvar), 1");
             break;
         }
+
         let idle_time = get_last_input().unwrap_or(0);
         if idle_time >= (max_idle * 94 / 100) {
             ExecState::user_present();
@@ -215,23 +283,17 @@ fn idle_loop(max_idle: u64, stop_rx: &Receiver<()>) -> Result<()> {
                 Err(e) => error!("Failed to send input: {e:?}"),
             }
             let sleep_secs = rng.random_range(5..=15);
-            if stop_rx
-                .recv_timeout(core::time::Duration::from_secs(sleep_secs))
-                .is_ok()
-            {
-                info!("Idle loop shutdown requested (channel), 2");
+
+            if exit_condvar.wait_for_exit(core::time::Duration::from_secs(sleep_secs)) {
+                info!("Idle loop shutdown requested (condvar), 2");
                 break;
             }
         } else {
             info!("Idle time: {idle_time}s, waiting for input");
-            let sleep_ms = rng.random_range(
-                u64::try_from(sleep_base.as_millis() / 2)?..=u64::try_from(sleep_base.as_millis())?,
-            );
-            if stop_rx
-                .recv_timeout(core::time::Duration::from_millis(sleep_ms))
-                .is_ok()
-            {
-                info!("Idle loop shutdown requested (channel), 3");
+            let sleep_ms = rng.random_range(sleep_base / 2..=sleep_base);
+
+            if exit_condvar.wait_for_exit(core::time::Duration::from_millis(sleep_ms)) {
+                info!("Idle loop shutdown requested (condvar), 3");
                 break;
             }
         }
@@ -241,18 +303,17 @@ fn idle_loop(max_idle: u64, stop_rx: &Receiver<()>) -> Result<()> {
 
 #[derive(Debug)]
 pub struct IdleController {
-    stop_tx: Sender<()>,
+    exit_condition: Arc<ExitCondition>,
     thread_handle: std::thread::JoinHandle<()>,
 }
 
 impl IdleController {
     /// # Errors
     /// Returns an error if the stop signal fails to send.
+    #[inline]
     pub fn stop(self, timeout: core::time::Duration) -> Result<()> {
-        let status = self.stop_tx.send(());
-        info!("Stop signal sent to idle thread: {status:?}");
-        drop(self.stop_tx);
-        info!("Stop signal sent to idle thread, waiting for it to finish");
+        self.exit_condition.start_exit();
+        info!("Stop signal sent to idle thread");
         if let Err(e) = mitigations::join_timeout(self.thread_handle, timeout) {
             error!("Idle thread join failed: {e:?}");
             return Err(anyhow::anyhow!("Idle thread join failed"));
@@ -267,26 +328,26 @@ impl IdleController {
 #[inline]
 pub fn spawn_idle_thread(max_idle: Option<u64>) -> IdleController {
     let idle = max_idle.unwrap_or(DEFAULT_MAX_IDLE);
-    let (stop_tx, stop_rx) = bounded::<()>(1);
+    let exit_condition = Arc::new(ExitCondition::new());
+
+    let exit_condition_clone = Arc::clone(&exit_condition);
     let thread_handle = std::thread::spawn(move || {
         mitigations::set_priority(mitigations::Priority::Lowest);
         mitigations::hide_current_thread_from_debuggers();
         info!("Starting idle thread after {idle} seconds delay");
-        if stop_rx
-            .recv_timeout(core::time::Duration::from_secs(idle))
-            .is_ok()
-        {
-            info!("Idle loop shutdown requested (channel)");
+
+        if exit_condition_clone.wait_for_exit(core::time::Duration::from_secs(idle)) {
+            info!("Idle loop shutdown requested (condvar), 0");
             return;
         }
 
-        let status = idle_loop(idle, &stop_rx);
+        let status = idle_loop(idle, &exit_condition_clone);
         if let Err(e) = status {
             error!("Idle loop exited with error: {e:?}");
         }
     });
     IdleController {
-        stop_tx,
+        exit_condition,
         thread_handle,
     }
 }

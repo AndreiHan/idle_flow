@@ -5,6 +5,7 @@ use windows::{
     Win32::{
         Foundation::GetLastError,
         System::{
+            ErrorReporting::WerAddExcludedApplication,
             Memory::{GetProcessHeap, HEAP_ZERO_MEMORY, HeapAlloc},
             Threading::{
                 CreateProcessW, EXTENDED_STARTUPINFO_PRESENT, GetCurrentThread,
@@ -17,12 +18,13 @@ use windows::{
             },
         },
     },
-    core::{Owned, PCWSTR, PWSTR},
+    core::{HSTRING, Owned, PCWSTR, PWSTR},
 };
 
 const PROCESS_CREATION_MITIGATION_POLICY_BLOCK_NON_MICROSOFT_BINARIES_ALWAYS_ON: u64 =
     0x0000_0001_u64 << 44;
 
+#[inline]
 pub fn clean_env() {
     // Clear the environment variables
     let env = std::env::vars().collect::<Vec<_>>();
@@ -59,27 +61,27 @@ unsafe fn get_dll_attributes() -> anyhow::Result<Owned<LPPROC_THREAD_ATTRIBUTE_L
         let _ = InitializeProcThreadAttributeList(None, 1, None, &raw mut attribute_size);
 
         let attributes = Owned::new(LPPROC_THREAD_ATTRIBUTE_LIST(HeapAlloc(
-            GetProcessHeap()?,
+            GetProcessHeap().map_err(|err| {
+                error!("Failed to get process heap: {err:?}");
+                anyhow::anyhow!("Failed to get process heap, {err:?}")
+            })?,
             HEAP_ZERO_MEMORY,
             attribute_size,
         )));
 
-        match InitializeProcThreadAttributeList(Some(*attributes), 1, None, &raw mut attribute_size)
+        if let Err(err) =
+            InitializeProcThreadAttributeList(Some(*attributes), 1, None, &raw mut attribute_size)
         {
-            Ok(()) => {
-                info!("Initialized attribute list");
-            }
-            Err(err) => {
-                error!("Failed to initialize attribute list: {err:?}");
-                return Err(anyhow::anyhow!(
-                    "Failed to initialize attribute list, {err:?}"
-                ));
-            }
+            error!("Failed to initialize attribute list: {err:?}");
+            return Err(anyhow::anyhow!(
+                "Failed to initialize attribute list, {err:?}"
+            ));
         }
+        trace!("Initialized attribute list, attribute size: {attribute_size}");
 
         let policy = PROCESS_CREATION_MITIGATION_POLICY_BLOCK_NON_MICROSOFT_BINARIES_ALWAYS_ON;
 
-        match UpdateProcThreadAttribute(
+        if let Err(err) = UpdateProcThreadAttribute(
             *attributes,
             0,
             PROC_THREAD_ATTRIBUTE_MITIGATION_POLICY as usize,
@@ -88,14 +90,11 @@ unsafe fn get_dll_attributes() -> anyhow::Result<Owned<LPPROC_THREAD_ATTRIBUTE_L
             None,
             None,
         ) {
-            Ok(()) => {
-                info!("Updated attribute list");
-            }
-            Err(err) => {
-                error!("Failed to update attribute list: {err:?}");
-                return Err(anyhow::anyhow!("Failed to update attribute list, {err:?}"));
-            }
+            error!("Failed to update attribute list: {err:?}");
+            return Err(anyhow::anyhow!("Failed to update attribute list, {err:?}"));
         }
+        trace!("Updated attribute list with mitigation policy: {policy:#x}");
+
         Ok(attributes)
     }
 }
@@ -131,7 +130,7 @@ pub fn restart_self() -> Result<(), anyhow::Error> {
 
         let mut process_info = PROCESS_INFORMATION::default();
 
-        match CreateProcessW(
+        if let Err(err) = CreateProcessW(
             PCWSTR::null(),
             Some(PWSTR::from_raw(wide_path.as_mut_ptr())),
             None,
@@ -143,15 +142,11 @@ pub fn restart_self() -> Result<(), anyhow::Error> {
             std::ptr::from_ref(&startup_info.StartupInfo),
             std::ptr::from_mut(&mut process_info),
         ) {
-            Ok(()) => {
-                info!("Created process: {current_path:?}");
-                Ok(())
-            }
-            Err(err) => {
-                error!("Failed to create process: {err} - | {:?}", GetLastError());
-                Err(anyhow::anyhow!("Failed to create process"))
-            }
+            error!("Failed to create process: {err} - | {:?}", GetLastError());
+            return Err(anyhow::anyhow!("Failed to create process"));
         }
+        trace!("Process created successfully, exiting current process");
+        Ok(())
     }
 }
 
@@ -185,6 +180,7 @@ pub fn join_timeout(
 #[allow(clippy::missing_panics_doc)]
 pub fn enable_mitigations() {
     hide_current_thread_from_debuggers();
+    exclude_wefault();
     clean_env();
     reset_current_dir();
     set_policy_mitigation();
@@ -202,6 +198,7 @@ pub enum Priority {
 }
 
 impl Priority {
+    #[inline]
     fn to_thread_priority(self) -> THREAD_PRIORITY {
         match self {
             Priority::Lowest => THREAD_PRIORITY_LOWEST,
@@ -237,6 +234,27 @@ pub fn hide_current_thread_from_debuggers() {
         )
     };
     info!("Set anti debug status: {status:?}");
+}
+
+#[inline]
+fn exclude_wefault() {
+    let Ok(current_exe) = std::env::current_exe() else {
+        error!("Failed to get current exe path");
+        return;
+    };
+
+    let Some(exe_name) = current_exe.file_name() else {
+        error!("Failed to get current exe name");
+        return;
+    };
+
+    trace!("Current exe name: {exe_name:?}");
+    trace!("Excluding {exe_name:?} from Windows Error Reporting");
+
+    let exe_name = HSTRING::from(exe_name.to_string_lossy().as_ref());
+
+    let status = unsafe { WerAddExcludedApplication(&exe_name, false) };
+    info!("Set wefault exclusion status: {status:?}");
 }
 
 #[inline]

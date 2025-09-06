@@ -18,7 +18,6 @@ default-target = "x86_64-pc-windows-msvc"
 targets = []
 
 [target.'cfg(windows)'.dependencies]
-
 app = { workspace = true }
 idler_utils = { workspace = true }
 mitigations = { workspace = true }
@@ -33,7 +32,7 @@ tray-icon = { workspace = true }
 winit = { workspace = true }
 
 [target.'cfg(windows)'.build-dependencies]
-tauri-winres = { workspace = true }
+tauri-winres = { workspace = true, default-features = false }
 
 [lints]
 workspace = true
