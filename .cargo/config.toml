@@ -1,10 +1,12 @@
 [build]
 rustflags = [
-    #"-D", "warnings",
+    # "-D", "warnings",
     "--cfg", "windows_slim_errors", 
+    # "-C", "target-cpu=x86-64-v4",
     "-C", "control-flow-guard",
     "-C", "target-feature=-crt-static",
     "-C", "link-arg=/DYNAMICBASE",
     "-C", "link-arg=/HIGHENTROPYVA",
-    "-C", "link-arg=/sdl",
+    # "-C", "link-arg=/CETCOMPAT",
+    "-C", "link-arg=/sdl"
 ]

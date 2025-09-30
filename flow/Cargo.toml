@@ -21,7 +21,7 @@ targets = []
 app = { workspace = true }
 idler_utils = { workspace = true }
 mitigations = { workspace = true }
-tracing = { workspace = true }
+tracing = { workspace = true, features = ["release_max_level_off"] }
 tracing-subscriber = { workspace = true, features = [
     "ansi",
     "fmt",
