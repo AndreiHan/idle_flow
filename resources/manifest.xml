@@ -2,13 +2,20 @@
 <assembly xmlns="urn:schemas-microsoft-com:asm.v1"
     xmlns:asmv3="urn:schemas-microsoft-com:asm.v3"
     manifestVersion="1.0">
+    <assemblyIdentity
+        version="1.0.0.0"
+        processorArchitecture="amd64"
+        name="idle_flow.flow"
+        type="win32"
+    />
+
     <dependency>
         <dependentAssembly>
             <assemblyIdentity
                 type="win32"
                 name="Microsoft.Windows.Common-Controls"
                 version="6.0.0.0"
-                processorArchitecture="arm64 amd64"
+                processorArchitecture="*"
                 publicKeyToken="6595b64144ccf1df"
                 language="*"
             />
@@ -18,12 +25,6 @@
     <asmv3:application>
         <asmv3:windowsSettings xmlns="http://schemas.microsoft.com/SMI/2020/WindowsSettings">
             <heapType>SegmentHeap</heapType>
-        </asmv3:windowsSettings>
-    </asmv3:application>
-
-    <asmv3:application>
-        <asmv3:windowsSettings xmlns="http://schemas.microsoft.com/SMI/2024/WindowsSettings">
-            <supportedArchitectures>amd64 arm64</supportedArchitectures>
         </asmv3:windowsSettings>
     </asmv3:application>
 
@@ -41,5 +42,4 @@
             </requestedPrivileges>
         </security>
     </trustInfo>
-
 </assembly>
