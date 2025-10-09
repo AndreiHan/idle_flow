@@ -1,8 +1,9 @@
 #![cfg(windows)]
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+use std::process::ExitCode;
 use tracing::{error, trace};
 
-fn main() {
+fn main() -> ExitCode {
     #[cfg(debug_assertions)]
     let _ = tracing_subscriber::fmt()
         .compact()
@@ -20,17 +21,19 @@ fn main() {
     trace!("Starting Flow application");
     if !std::env::args().any(|arg| arg == "--restart") {
         trace!("Restarting Flow application");
-        if mitigations::restart_self().is_err() {
-            error!("Failed to restart Flow application");
+        let res = mitigations::restart_self();
+        if let Err(err) = res {
+            error!("Failed to restart Flow application: {err}");
+            return ExitCode::FAILURE;
         }
-        return;
+        return ExitCode::SUCCESS;
     }
     idler_utils::ExecState::start();
 
     let Ok(event_loop) = winit::event_loop::EventLoop::<tray::UserEvent>::with_user_event().build()
     else {
         error!("Failed to create event loop");
-        return;
+        return ExitCode::FAILURE;
     };
 
     let tray_icon_proxy = event_loop.create_proxy();
@@ -53,7 +56,8 @@ fn main() {
     let mut app = app::Application::new(event_loop.create_proxy());
     if let Err(err) = event_loop.run_app(&mut app) {
         error!("Run Error: {err:?}");
-        return;
+        return ExitCode::FAILURE;
     }
     trace!("Flow application exited successfully");
+    ExitCode::SUCCESS
 }

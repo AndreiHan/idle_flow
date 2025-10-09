@@ -50,7 +50,7 @@ impl Default for ExitCondition {
 
 impl ExitCondition {
     #[must_use]
-    fn new() -> Self {
+    const fn new() -> Self {
         Self {
             condvar: Condvar::new(),
             mutex: Mutex::new(false),

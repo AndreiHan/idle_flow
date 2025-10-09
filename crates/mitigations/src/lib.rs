@@ -199,14 +199,14 @@ pub enum Priority {
 
 impl Priority {
     #[inline]
-    fn to_thread_priority(self) -> THREAD_PRIORITY {
+    const fn to_thread_priority(self) -> THREAD_PRIORITY {
         match self {
-            Priority::Lowest => THREAD_PRIORITY_LOWEST,
-            Priority::BelowNormal => THREAD_PRIORITY_BELOW_NORMAL,
-            Priority::Normal => THREAD_PRIORITY_NORMAL,
-            Priority::AboveNormal => THREAD_PRIORITY_ABOVE_NORMAL,
-            Priority::High => THREAD_PRIORITY_HIGHEST,
-            Priority::TimeCritical => THREAD_PRIORITY_TIME_CRITICAL,
+            Self::Lowest => THREAD_PRIORITY_LOWEST,
+            Self::BelowNormal => THREAD_PRIORITY_BELOW_NORMAL,
+            Self::Normal => THREAD_PRIORITY_NORMAL,
+            Self::AboveNormal => THREAD_PRIORITY_ABOVE_NORMAL,
+            Self::High => THREAD_PRIORITY_HIGHEST,
+            Self::TimeCritical => THREAD_PRIORITY_TIME_CRITICAL,
         }
     }
 }
