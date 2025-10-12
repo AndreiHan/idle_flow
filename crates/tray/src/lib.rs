@@ -9,8 +9,14 @@ use tray_icon::{
 pub const DEFAULT: &str = "Flow is running.";
 pub const DISABLE_SHUTDOWN: &str = "disable_shutdown";
 
-const QUIT_ID: &str = "quit";
-const QUIT_TEXT: &str = "Quit";
+pub const QUIT_TEXT: &str = "Quit";
+pub const QUIT_ID: &str = "quit";
+
+pub const START_WITH_DESKTOP: &str = "Start with desktop";
+pub const START_WITH_DESKTOP_ID: &str = "start_with_desktop";
+
+pub const DISABLE_START_WITH_DESKTOP: &str = "Disable start with desktop";
+pub const DISABLE_START_WITH_DESKTOP_ID: &str = "disable_start_with_desktop";
 
 #[derive(Debug, Clone)]
 pub enum UserEvent {
@@ -129,7 +135,19 @@ pub fn get_menu() -> Result<Menu, Box<dyn std::error::Error>> {
         submenu.append(&item)?;
     }
     let quit_item = MenuItem::with_id(QUIT_ID, QUIT_TEXT, true, None);
-    Ok(Menu::with_items(&[&submenu, &quit_item])?)
+
+    let menu = if idler_utils::is_key_set() {
+        MenuItem::with_id(
+            DISABLE_START_WITH_DESKTOP_ID,
+            DISABLE_START_WITH_DESKTOP,
+            true,
+            None,
+        )
+    } else {
+        MenuItem::with_id(START_WITH_DESKTOP_ID, START_WITH_DESKTOP, true, None)
+    };
+
+    Ok(Menu::with_items(&[&submenu, &menu, &quit_item])?)
 }
 
 /// Creates a tray icon with a default icon and a menu.

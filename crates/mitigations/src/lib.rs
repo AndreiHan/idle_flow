@@ -1,12 +1,16 @@
 #![cfg(windows)]
-use tracing::{error, info, trace, warn};
+use tracing::{error, info, trace};
 use windows::{
     Wdk::System::Threading::{NtSetInformationThread, ThreadHideFromDebugger},
     Win32::{
         Foundation::GetLastError,
         System::{
             ErrorReporting::WerAddExcludedApplication,
-            Memory::{GetProcessHeap, HEAP_ZERO_MEMORY, HeapAlloc},
+            Memory::{
+                GetProcessHeap, HEAP_ZERO_MEMORY, HeapAlloc, HeapEnableTerminationOnCorruption,
+                HeapOptimizeResources, HeapSetInformation,
+            },
+            SystemServices::HEAP_OPTIMIZE_RESOURCES_INFORMATION,
             Threading::{
                 CreateProcessW, EXTENDED_STARTUPINFO_PRESENT, GetCurrentThread,
                 InitializeProcThreadAttributeList, LPPROC_THREAD_ATTRIBUTE_LIST,
@@ -28,18 +32,21 @@ const PROCESS_CREATION_MITIGATION_POLICY_BLOCK_NON_MICROSOFT_BINARIES_ALWAYS_ON:
 pub fn clean_env() {
     // Clear the environment variables
     let env = std::env::vars().collect::<Vec<_>>();
-    for (key, val) in env {
-        trace!("Clearing environment variable: {key}={val}");
+    for (key, _val) in env {
         unsafe { std::env::remove_var(key) };
     }
-    info!("Environment variables cleared, checking");
-    let env = std::env::vars().collect::<Vec<_>>();
-    if env.is_empty() {
-        info!("No environment variables found");
-    } else {
-        warn!("Remaining environment variables:");
-        for (key, val) in env {
-            info!("{key}={val}");
+
+    #[cfg(debug_assertions)]
+    {
+        info!("Environment variables cleared, checking");
+        let env = std::env::vars().collect::<Vec<_>>();
+        if env.is_empty() {
+            info!("No environment variables found");
+        } else {
+            error!("Remaining environment variables:");
+            for (key, val) in env {
+                error!("{key}={val}");
+            }
         }
     }
 }
@@ -179,12 +186,35 @@ pub fn join_timeout(
 #[inline]
 #[allow(clippy::missing_panics_doc)]
 pub fn enable_mitigations() {
+    info!("Enabling mitigations");
     hide_current_thread_from_debuggers();
+    heap_protection();
     exclude_wefault();
     clean_env();
     reset_current_dir();
     set_policy_mitigation();
     info!("Mitigations enabled");
+}
+
+fn heap_protection() {
+    info!("Enabling heap protections");
+    let res = unsafe { HeapSetInformation(None, HeapEnableTerminationOnCorruption, None, 0) };
+    info!("HeapSetInformation - HeapEnableTerminationOnCorruption result: {res:?}");
+
+    let heap_info = HEAP_OPTIMIZE_RESOURCES_INFORMATION {
+        Version: 1,
+        ..Default::default()
+    };
+
+    let res = unsafe {
+        HeapSetInformation(
+            None,
+            HeapOptimizeResources,
+            Some((&raw const heap_info).cast::<std::ffi::c_void>()),
+            std::mem::size_of::<HEAP_OPTIMIZE_RESOURCES_INFORMATION>(),
+        )
+    };
+    info!("HeapSetInformation - HeapOptimizeResources result: {res:?}");
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

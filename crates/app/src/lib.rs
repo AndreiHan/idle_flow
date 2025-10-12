@@ -91,6 +91,25 @@ impl ApplicationHandler<tray::UserEvent> for Application {
     }
 }
 
+fn refresh_menu(app: &mut Application) {
+    let Some(tray_icon) = &app.tray_icon else {
+        warn!("Tray icon is not initialized; cannot refresh menu.");
+        return;
+    };
+
+    trace!("Refreshing tray menu after Move event");
+    match tray::get_menu() {
+        Ok(menu) => {
+            tray_icon.set_menu(None);
+            tray_icon.set_menu(Some(Box::new(menu)));
+            info!("Tray menu refreshed successfully.");
+        }
+        Err(e) => {
+            error!("Failed to get tray menu: {e}");
+        }
+    }
+}
+
 fn handle_tray_icon_event(
     app: &mut Application,
     _event_loop: &winit::event_loop::ActiveEventLoop,
@@ -115,22 +134,8 @@ fn handle_tray_icon_event(
     }
     app.last_tray_update = Some(now);
 
-    let Some(tray_icon) = &app.tray_icon else {
-        warn!("Tray icon is not initialized; cannot refresh menu.");
-        return;
-    };
-
     trace!("Refreshing tray menu after Move event");
-    match tray::get_menu() {
-        Ok(menu) => {
-            tray_icon.set_menu(None);
-            tray_icon.set_menu(Some(Box::new(menu)));
-            info!("Tray menu refreshed successfully.");
-        }
-        Err(e) => {
-            error!("Failed to get tray menu: {e}");
-        }
-    }
+    refresh_menu(app);
 }
 
 fn handle_menu_event(
@@ -140,12 +145,30 @@ fn handle_menu_event(
 ) {
     let data = event.id.0.as_str();
     info!("Menu event received: {data}");
-    if data == "quit" {
+    if data == tray::QUIT_ID {
         handle_quit(app, event_loop);
         return;
     }
     if data == tray::DISABLE_SHUTDOWN {
         handle_disable_shutdown(app);
+        return;
+    }
+    if data == tray::START_WITH_DESKTOP_ID {
+        if let Err(e) = idler_utils::set_key() {
+            error!("Failed to set start with desktop: {e}");
+        } else {
+            info!("Start with desktop enabled.");
+        }
+        refresh_menu(app);
+        return;
+    }
+    if data == tray::DISABLE_START_WITH_DESKTOP_ID {
+        if let Err(e) = idler_utils::unset_key() {
+            error!("Failed to clear start with desktop: {e}");
+        } else {
+            info!("Start with desktop disabled.");
+        }
+        refresh_menu(app);
         return;
     }
     handle_shutdown_time(app, data);

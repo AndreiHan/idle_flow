@@ -16,11 +16,16 @@ crossbeam = { workspace = true, features = ["std"] }
 mitigations = { workspace = true }
 rand = { workspace = true, features = ["thread_rng"] }
 tracing = { workspace = true }
+windows-registry = { workspace = true }
 windows = { workspace = true, features = [
   "Win32_Foundation",
   "Win32_System_Power",
   "Win32_UI_Input_KeyboardAndMouse",
   "Win32_System_SystemInformation",
+  "Win32_Graphics_Gdi",
+  "Win32_UI_WindowsAndMessaging",
+  "Win32_System_Shutdown",
+  "Win32_System_Recovery"
 ] }
 
 [lints]
