@@ -5,6 +5,7 @@ use windows::{
     Win32::{
         Foundation::GetLastError,
         System::{
+            Console::FreeConsole,
             ErrorReporting::WerAddExcludedApplication,
             Memory::{
                 GetProcessHeap, HEAP_ZERO_MEMORY, HeapAlloc, HeapEnableTerminationOnCorruption,
@@ -12,13 +13,13 @@ use windows::{
             },
             SystemServices::HEAP_OPTIMIZE_RESOURCES_INFORMATION,
             Threading::{
-                CreateProcessW, EXTENDED_STARTUPINFO_PRESENT, GetCurrentThread,
-                InitializeProcThreadAttributeList, LPPROC_THREAD_ATTRIBUTE_LIST,
-                PROC_THREAD_ATTRIBUTE_MITIGATION_POLICY, PROCESS_INFORMATION, STARTUPINFOEXW,
-                STARTUPINFOW, STARTUPINFOW_FLAGS, SetThreadPriority, THREAD_PRIORITY,
-                THREAD_PRIORITY_ABOVE_NORMAL, THREAD_PRIORITY_BELOW_NORMAL,
-                THREAD_PRIORITY_HIGHEST, THREAD_PRIORITY_LOWEST, THREAD_PRIORITY_NORMAL,
-                THREAD_PRIORITY_TIME_CRITICAL, UpdateProcThreadAttribute,
+                BELOW_NORMAL_PRIORITY_CLASS, CreateProcessW, EXTENDED_STARTUPINFO_PRESENT,
+                GetCurrentProcess, GetCurrentThread, InitializeProcThreadAttributeList,
+                LPPROC_THREAD_ATTRIBUTE_LIST, PROC_THREAD_ATTRIBUTE_MITIGATION_POLICY,
+                PROCESS_INFORMATION, STARTUPINFOEXW, STARTUPINFOW, STARTUPINFOW_FLAGS,
+                SetPriorityClass, SetThreadPriority, THREAD_PRIORITY, THREAD_PRIORITY_ABOVE_NORMAL,
+                THREAD_PRIORITY_BELOW_NORMAL, THREAD_PRIORITY_HIGHEST, THREAD_PRIORITY_LOWEST,
+                THREAD_PRIORITY_NORMAL, THREAD_PRIORITY_TIME_CRITICAL, UpdateProcThreadAttribute,
             },
         },
     },
@@ -27,6 +28,11 @@ use windows::{
 
 const PROCESS_CREATION_MITIGATION_POLICY_BLOCK_NON_MICROSOFT_BINARIES_ALWAYS_ON: u64 =
     0x0000_0001_u64 << 44;
+
+pub trait Closeable {
+    fn init_close(&self);
+    fn wait_close(self);
+}
 
 #[inline]
 pub fn clean_env() {
@@ -153,7 +159,15 @@ pub fn restart_self() -> Result<(), anyhow::Error> {
             return Err(anyhow::anyhow!("Failed to create process"));
         }
         trace!("Process created successfully, exiting current process");
+        free_console();
         Ok(())
+    }
+}
+
+pub fn free_console() {
+    unsafe {
+        let res = FreeConsole();
+        info!("FreeConsole result: {res:?}");
     }
 }
 
@@ -246,6 +260,14 @@ pub fn set_priority(priority: Priority) {
     unsafe {
         let status = SetThreadPriority(GetCurrentThread(), priority.to_thread_priority());
         trace!("Set thread priority to {priority:?}: {status:?}");
+    }
+}
+
+#[inline]
+pub fn set_process_priority() {
+    unsafe {
+        let status = SetPriorityClass(GetCurrentProcess(), BELOW_NORMAL_PRIORITY_CLASS);
+        trace!("Set process priority to BelowNormal: {status:?}");
     }
 }
 

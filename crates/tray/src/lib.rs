@@ -136,7 +136,7 @@ pub fn get_menu() -> Result<Menu, Box<dyn std::error::Error>> {
     }
     let quit_item = MenuItem::with_id(QUIT_ID, QUIT_TEXT, true, None);
 
-    let menu = if idler_utils::is_key_set() {
+    let menu = if idler_utils::registry::is_key_set() {
         MenuItem::with_id(
             DISABLE_START_WITH_DESKTOP_ID,
             DISABLE_START_WITH_DESKTOP,

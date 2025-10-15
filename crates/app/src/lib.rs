@@ -1,5 +1,6 @@
 #![cfg(windows)]
 use anyhow::Result;
+use mitigations::Closeable;
 use tracing::{error, info, trace, warn};
 use winit::application::ApplicationHandler;
 
@@ -11,6 +12,7 @@ pub struct Application {
     last_tray_update: Option<std::time::Instant>,
     shutdown: Option<app_controller::AppController>,
     idle_controller: Option<idler_utils::IdleController>,
+    registry_watcher: Option<idler_utils::registry::RegistryWatcher>,
 }
 
 impl Application {
@@ -22,6 +24,7 @@ impl Application {
             last_tray_update: None,
             shutdown: None,
             idle_controller: None,
+            registry_watcher: None,
         }
     }
 
@@ -71,7 +74,10 @@ impl ApplicationHandler<tray::UserEvent> for Application {
             return;
         };
         self.tray_icon = Some(tray_icon);
+        self.registry_watcher = idler_utils::registry::RegistryWatcher::build().ok();
         self.idle_controller = Some(idler_utils::spawn_idle_thread(None));
+        mitigations::set_process_priority();
+        mitigations::set_priority(mitigations::Priority::Lowest);
         info!("Tray icon created successfully.");
     }
 
@@ -91,7 +97,7 @@ impl ApplicationHandler<tray::UserEvent> for Application {
     }
 }
 
-fn refresh_menu(app: &mut Application) {
+fn refresh_menu(app: &Application) {
     let Some(tray_icon) = &app.tray_icon else {
         warn!("Tray icon is not initialized; cannot refresh menu.");
         return;
@@ -154,7 +160,7 @@ fn handle_menu_event(
         return;
     }
     if data == tray::START_WITH_DESKTOP_ID {
-        if let Err(e) = idler_utils::set_key() {
+        if let Err(e) = idler_utils::registry::set_key() {
             error!("Failed to set start with desktop: {e}");
         } else {
             info!("Start with desktop enabled.");
@@ -163,7 +169,7 @@ fn handle_menu_event(
         return;
     }
     if data == tray::DISABLE_START_WITH_DESKTOP_ID {
-        if let Err(e) = idler_utils::unset_key() {
+        if let Err(e) = idler_utils::registry::unset_key() {
             error!("Failed to clear start with desktop: {e}");
         } else {
             info!("Start with desktop disabled.");
@@ -209,18 +215,61 @@ fn handle_quit(app: &mut Application, event_loop: &winit::event_loop::ActiveEven
     event_loop.exit();
     info!("Exiting event loop.");
 
-    if let Some(idle_controller) = app.idle_controller.take() {
-        if let Err(e) = idle_controller.stop(TIMEOUT) {
-            error!("Failed to stop idle controller: {e}");
-        } else {
-            info!("Idle controller stopped successfully.");
-        }
+    if let Some(tray_icon) = app.tray_icon.take() {
+        info!("Destroying tray icon.");
+        let res = tray_icon.set_icon(None);
+        info!("Tray icon set to None, result: {res:?}");
+    } else {
+        warn!("No tray icon to destroy.");
     }
-    if let Some(shutdown) = app.shutdown.take() {
-        info!("Shutdown data taken");
-        let status = shutdown.close(TIMEOUT);
-        info!("Shutdown handler disabled, status: {status:?}");
+
+    let current_idle = app.idle_controller.take().map_or_else(
+        || None,
+        |idle_controller| {
+            info!("Initiating close of idle controller.");
+            idle_controller.init_close();
+            Some(idle_controller)
+        },
+    );
+
+    let current_shutdown = app.shutdown.take().map_or_else(
+        || None,
+        |shutdown| {
+            info!("Initiating close of shutdown handler.");
+            shutdown.init_close();
+            Some(shutdown)
+        },
+    );
+
+    let inner_registry = app.registry_watcher.take().map_or_else(
+        || None,
+        |registry_watcher| {
+            info!("Initiating close of registry watcher.");
+            registry_watcher.init_close();
+            Some(registry_watcher)
+        },
+    );
+
+    info!("Initiated close of all closable items.");
+
+    if let Some(current_idle) = current_idle {
+        info!("Waiting for idle controller to finish.");
+        current_idle.wait_close();
+        info!("Idle controller closed.");
     }
+
+    if let Some(current_shutdown) = current_shutdown {
+        info!("Waiting for shutdown handler to finish.");
+        current_shutdown.wait_close();
+        info!("Shutdown handler closed.");
+    }
+
+    if let Some(inner_registry) = inner_registry {
+        info!("Waiting for registry watcher to finish.");
+        inner_registry.wait_close();
+        info!("Registry watcher closed.");
+    }
+
     info!("Exiting after cleanup.");
 }
 

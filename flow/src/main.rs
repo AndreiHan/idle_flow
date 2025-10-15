@@ -51,7 +51,6 @@ fn main() -> ExitCode {
             error!("Failed to send menu event: {err:?}");
         }
     }));
-    mitigations::set_priority(mitigations::Priority::Lowest);
 
     let mut app = app::Application::new(event_loop.create_proxy());
     if let Err(err) = event_loop.run_app(&mut app) {
@@ -59,5 +58,6 @@ fn main() -> ExitCode {
         return ExitCode::FAILURE;
     }
     trace!("Flow application exited successfully");
+    mitigations::free_console();
     ExitCode::SUCCESS
 }

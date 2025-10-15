@@ -124,6 +124,22 @@ impl AppController {
     }
 }
 
+impl mitigations::Closeable for AppController {
+    fn init_close(&self) {
+        let status = self.sender.send("shutdown".to_string());
+        info!("Sent shutdown signal: {status:?}");
+    }
+
+    fn wait_close(self) {
+        let res = mitigations::join_timeout(self.close_handle, std::time::Duration::from_secs(5));
+        if let Err(e) = res {
+            error!("Failed to join close handle: {e}");
+        } else {
+            info!("Close handle joined successfully");
+        }
+    }
+}
+
 #[inline]
 fn schedule_close(
     proxy: winit::event_loop::EventLoopProxy<tray::UserEvent>,

@@ -21,7 +21,8 @@ windows = { workspace = true, features = [
   "Win32_System_Memory",
   "Win32_Security",
   "Win32_System_Environment",
-  "Win32_System_ErrorReporting"
+  "Win32_System_ErrorReporting",
+  "Win32_System_Console"
 ] }
 
 [lints]
