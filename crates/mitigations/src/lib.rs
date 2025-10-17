@@ -112,7 +112,7 @@ unsafe fn get_dll_attributes() -> anyhow::Result<Owned<LPPROC_THREAD_ATTRIBUTE_L
     }
 }
 
-/// Restarts the current process with the `--restart` argument.
+/// Restarts the current process with the `--clean` argument.
 ///
 /// # Errors
 /// Returns an error if the process restart fails.
@@ -122,7 +122,7 @@ pub fn restart_self() -> Result<(), anyhow::Error> {
     let Some(current_path) = current_path.to_str() else {
         return Err(anyhow::anyhow!("Failed to convert path to string"));
     };
-    let cmdline = format!("\"{current_path}\" --restart");
+    let cmdline = format!("\"{current_path}\" --clean");
 
     info!("Cmdline: {cmdline:?}");
     let mut wide_path = cmdline
@@ -186,7 +186,7 @@ pub fn join_timeout(
         if thread_handle.is_finished() {
             info!("Thread finished");
             return thread_handle.join().map_err(|e| {
-                info!("Thread join failed: {e:?}");
+                error!("Thread join failed: {e:?}");
                 anyhow::anyhow!("Thread join failed")
             });
         }
@@ -194,6 +194,7 @@ pub fn join_timeout(
             info!("Thread join timed out");
             return Err(anyhow::anyhow!("Thread join timed out"));
         }
+        std::thread::yield_now();
     }
 }
 
@@ -311,15 +312,15 @@ fn exclude_wefault() {
 
 #[inline]
 fn set_policy_mitigation() {
-    if std::env::args().any(|arg| arg == "--restart") {
-        info!("Found --restart argument, setting child process policy");
+    if std::env::args().any(|arg| arg == "--clean") {
+        info!("Found --clean argument, setting child process policy");
         win_mitigations::child_process::ChildProcessPolicy::default()
             .set_no_child_process_creation(true)
             .build()
             .inspect(|()| trace!("Child process policy set"))
             .expect("Failed to set child process policy");
     } else {
-        info!("No --restart argument found, not setting child process policy");
+        info!("No --clean argument found, not setting child process policy");
     }
 
     win_mitigations::binary_signature::BinarySignaturePolicy::default()

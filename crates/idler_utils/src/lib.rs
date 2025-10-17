@@ -28,6 +28,7 @@ use windows::{
 
 mod input_utils;
 pub mod registry;
+pub mod single_instance;
 
 /// Default maximum idle time in seconds
 #[cfg(debug_assertions)]

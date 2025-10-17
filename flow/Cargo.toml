@@ -18,6 +18,7 @@ default-target = "x86_64-pc-windows-msvc"
 targets = []
 
 [target.'cfg(windows)'.dependencies]
+anyhow = { workspace = true }
 app = { workspace = true }
 idler_utils = { workspace = true }
 mitigations = { workspace = true }
