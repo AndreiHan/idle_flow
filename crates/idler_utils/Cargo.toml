@@ -26,7 +26,9 @@ windows = { workspace = true, features = [
   "Win32_UI_WindowsAndMessaging",
   "Win32_System_Shutdown",
   "Win32_System_Recovery",
-  "Win32_System_Registry"
+  "Win32_System_Registry",
+  "Win32_Security",
+  "Win32_System_Threading"
 ] }
 
 [lints]
