@@ -30,6 +30,19 @@ fn main() -> ExitCode {
     }
     idler_utils::ExecState::start();
 
+    let exit_code = run_app();
+    trace!("Flow application exited with code: {exit_code:?}");
+
+    mitigations::free_console();
+    exit_code
+}
+
+fn run_app() -> ExitCode {
+    let Ok(_guard) = idler_utils::single_instance::get_single_instance_guard() else {
+        error!("Another instance of Flow is already running");
+        return ExitCode::FAILURE;
+    };
+
     let Ok(event_loop) = winit::event_loop::EventLoop::<tray::UserEvent>::with_user_event().build()
     else {
         error!("Failed to create event loop");
@@ -57,7 +70,5 @@ fn main() -> ExitCode {
         error!("Run Error: {err:?}");
         return ExitCode::FAILURE;
     }
-    trace!("Flow application exited successfully");
-    mitigations::free_console();
     ExitCode::SUCCESS
 }

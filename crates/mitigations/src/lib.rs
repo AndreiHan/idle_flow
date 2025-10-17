@@ -186,7 +186,7 @@ pub fn join_timeout(
         if thread_handle.is_finished() {
             info!("Thread finished");
             return thread_handle.join().map_err(|e| {
-                info!("Thread join failed: {e:?}");
+                error!("Thread join failed: {e:?}");
                 anyhow::anyhow!("Thread join failed")
             });
         }
@@ -194,6 +194,7 @@ pub fn join_timeout(
             info!("Thread join timed out");
             return Err(anyhow::anyhow!("Thread join timed out"));
         }
+        std::thread::yield_now();
     }
 }
 
