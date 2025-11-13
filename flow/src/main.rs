@@ -3,9 +3,11 @@
 use std::process::ExitCode;
 use tracing::{error, trace};
 
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+
 fn main() -> ExitCode {
     init_app();
-    trace!("Starting Flow application");
+    trace!("Starting Flow application, version: {VERSION}");
     if !std::env::args().any(|arg| arg == "--clean") {
         trace!("Restarting Flow application");
         let res = mitigations::restart_self();

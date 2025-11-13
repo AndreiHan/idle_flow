@@ -31,5 +31,8 @@ windows = { workspace = true, features = [
   "Win32_System_Threading"
 ] }
 
+[build-dependencies]
+chrono = { workspace = true, features = ["clock", "std"] }
+
 [lints]
 workspace = true

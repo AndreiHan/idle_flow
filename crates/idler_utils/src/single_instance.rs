@@ -7,7 +7,7 @@ use windows::{
     },
     core::PCWSTR,
 };
-const MUTEX_NAME: &str = "idle_flow";
+const MUTEX_NAME: &str = "{019a7f5b-45e0-7ac5-827a-54e386ef37b9}-idle_flow";
 
 pub struct SingleInstanceGuard {
     mutex_handle: HANDLE,

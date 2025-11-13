@@ -1,4 +1,8 @@
 #![cfg(windows)]
+#![allow(clippy::missing_panics_doc)]
+
+use std::sync::{LazyLock, Mutex, atomic::AtomicBool};
+
 use tracing::{error, info, trace};
 use windows::{
     Wdk::System::Threading::{NtSetInformationThread, ThreadHideFromDebugger},
@@ -29,6 +33,9 @@ use windows::{
 const PROCESS_CREATION_MITIGATION_POLICY_BLOCK_NON_MICROSOFT_BINARIES_ALWAYS_ON: u64 =
     0x0000_0001_u64 << 44;
 
+static ENV_MUTEX: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
+static ENV_CLEANED: AtomicBool = AtomicBool::new(false);
+
 pub trait Closeable {
     fn init_close(&self);
     fn wait_close(self);
@@ -37,9 +44,18 @@ pub trait Closeable {
 #[inline]
 pub fn clean_env() {
     // Clear the environment variables
+    if ENV_CLEANED.load(std::sync::atomic::Ordering::Relaxed) {
+        trace!("Environment already cleaned, skipping");
+        return;
+    }
+    ENV_CLEANED.store(true, std::sync::atomic::Ordering::Relaxed);
+    let _lock = ENV_MUTEX.lock().expect("Failed to lock ENV_MUTEX");
     let env = std::env::vars().collect::<Vec<_>>();
     for (key, _val) in env {
-        unsafe { std::env::remove_var(key) };
+        unsafe {
+            std::env::set_var(&key, "");
+            std::env::remove_var(&key);
+        };
     }
 
     #[cfg(debug_assertions)]
@@ -180,22 +196,27 @@ pub fn join_timeout(
     thread_handle: std::thread::JoinHandle<()>,
     timeout: std::time::Duration,
 ) -> Result<(), anyhow::Error> {
-    let timeout = std::time::Instant::now() + timeout;
-    trace!("Waiting for thread to finish with timeout: {timeout:?}");
-    loop {
-        if thread_handle.is_finished() {
-            info!("Thread finished");
-            return thread_handle.join().map_err(|e| {
-                error!("Thread join failed: {e:?}");
-                anyhow::anyhow!("Thread join failed")
-            });
-        }
-        if timeout < std::time::Instant::now() {
-            info!("Thread join timed out");
+    trace!(
+        "Joining threadID: {:?} with timeout: {timeout:?}",
+        thread_handle.thread().id()
+    );
+    let start = std::time::Instant::now();
+    while !thread_handle.is_finished() {
+        if start.elapsed() > timeout {
+            error!("Thread join timed out after {timeout:?}");
             return Err(anyhow::anyhow!("Thread join timed out"));
         }
-        std::thread::yield_now();
+        std::thread::park_timeout(std::time::Duration::from_millis(5));
     }
+    trace!(
+        "ThreadID: {:?} finished, joining",
+        thread_handle.thread().id()
+    );
+    thread_handle.join().map_err(|err| {
+        error!("Failed to join thread: {err:?}");
+        anyhow::anyhow!("Failed to join thread")
+    })?;
+    Ok(())
 }
 
 #[inline]
@@ -334,19 +355,6 @@ fn set_policy_mitigation() {
         .build()
         .inspect(|()| trace!("Font disable policy set"))
         .expect("Failed to set font disable policy");
-
-    win_mitigations::extension_point::ExtensionPointPolicy::default()
-        .set_disable_extension_points(true)
-        .build()
-        .inspect(|()| trace!("Extension point policy set"))
-        .expect("Failed to set extension point policy");
-
-    win_mitigations::aslr::AslrPolicy::default()
-        .set_enable_bottom_up_randomization(true)
-        .set_enable_force_relocate_images(true)
-        .build()
-        .inspect(|()| trace!("ASLR policy set"))
-        .expect("Failed to set ASLR policy");
 
     win_mitigations::extension_point::ExtensionPointPolicy::default()
         .set_disable_extension_points(true)
