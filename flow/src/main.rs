@@ -1,13 +1,13 @@
 #![cfg(windows)]
-//#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 use std::process::ExitCode;
 use tracing::{error, trace};
 
-pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+const GIT_COMMIT_SHA: &str = env!("GIT_COMMIT_SHA");
 
 fn main() -> ExitCode {
     init_app();
-    trace!("Starting Flow application, version: {VERSION}");
     if !std::env::args().any(|arg| arg == "--clean") {
         trace!("Restarting Flow application");
         let res = mitigations::restart_self();
@@ -37,7 +37,7 @@ fn init_app() {
         .with_ansi(true)
         .try_init();
 
-    trace!("Initializing Flow application, pid: {}", std::process::id());
+    trace!("Starting Flow application, \nVersion: {VERSION}\nGit Commit SHA: {GIT_COMMIT_SHA}");
     mitigations::enable_mitigations();
     idler_utils::ExecState::start();
 }

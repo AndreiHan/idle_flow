@@ -7,6 +7,7 @@ authors.workspace = true
 version.workspace = true
 
 [package.metadata.tauri-winres]
+ProductName = "Flow"
 LegalCopyright = "IF©2025"
 OriginalFilename = "flow.exe"
 
