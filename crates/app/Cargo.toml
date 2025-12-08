@@ -14,11 +14,11 @@ anyhow = { workspace = true }
 
 app_controller = { workspace = true }
 idler_utils = { workspace = true }
+mitigations = { workspace = true }
 tracing = { workspace = true }
 tray = { workspace = true }
 tray-icon = { workspace = true }
 winit = { workspace = true }
-mitigations = { workspace = true }
 
 [lints]
 workspace = true

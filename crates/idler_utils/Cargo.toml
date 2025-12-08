@@ -12,11 +12,10 @@ targets = []
 [target.'cfg(windows)'.dependencies]
 anyhow = { workspace = true }
 crossbeam = { workspace = true, features = ["std"] }
-
 mitigations = { workspace = true }
+parking_lot = { workspace = true }
 rand = { workspace = true, features = ["thread_rng"] }
 tracing = { workspace = true }
-windows-registry = { workspace = true }
 windows = { workspace = true, features = [
   "Win32_Foundation",
   "Win32_System_Power",
@@ -30,6 +29,7 @@ windows = { workspace = true, features = [
   "Win32_Security",
   "Win32_System_Threading"
 ] }
+windows-registry = { workspace = true }
 
 [build-dependencies]
 chrono = { workspace = true, features = ["clock", "std"] }

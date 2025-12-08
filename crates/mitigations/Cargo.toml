@@ -11,8 +11,8 @@ targets = []
 
 [target.'cfg(windows)'.dependencies]
 anyhow = { workspace = true }
+parking_lot = { workspace = true }
 tracing = { workspace = true }
-
 win_mitigations = { workspace = true }
 windows = { workspace = true, features = [
   "Win32_System_Threading",

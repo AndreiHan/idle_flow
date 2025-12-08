@@ -11,10 +11,10 @@ targets = []
 
 [target.'cfg(windows)'.dependencies]
 chrono = { workspace = true, features = ["std", "clock"] }
+idler_utils = { workspace = true }
 image = { workspace = true, features = ["png"] }
 tracing = { workspace = true }
 tray-icon = { workspace = true }
-idler_utils = { workspace = true }
 
 [lints]
 workspace = true

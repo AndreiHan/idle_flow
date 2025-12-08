@@ -1,8 +1,9 @@
 #![cfg(windows)]
 #![allow(clippy::missing_panics_doc)]
 
-use std::sync::{LazyLock, Mutex, atomic::AtomicBool};
+use std::sync::{LazyLock, atomic::AtomicBool};
 
+use parking_lot::Mutex;
 use tracing::{error, info, trace};
 use windows::{
     Wdk::System::Threading::{NtSetInformationThread, ThreadHideFromDebugger},
@@ -49,7 +50,7 @@ pub fn clean_env() {
         return;
     }
     ENV_CLEANED.store(true, std::sync::atomic::Ordering::Relaxed);
-    let _lock = ENV_MUTEX.lock().expect("Failed to lock ENV_MUTEX");
+    let _lock = ENV_MUTEX.lock();
     let env = std::env::vars().collect::<Vec<_>>();
     for (key, _val) in env {
         unsafe {

@@ -1,7 +1,8 @@
 #![cfg(windows)]
-use std::sync::{Arc, Condvar, Mutex};
+use std::sync::Arc;
 
 use anyhow::Result;
+use parking_lot::{Condvar, Mutex};
 use rand::{Rng, rng};
 use tracing::{debug, error, info, warn};
 use windows::Win32::UI::WindowsAndMessaging::{WM_ENDSESSION, WM_QUERYENDSESSION};
@@ -89,27 +90,23 @@ impl ExitCondition {
     #[inline]
     fn start_exit(&self) {
         info!("Exit condition triggered");
-        let mut guard = self.mutex.lock().unwrap();
+        let mut guard = self.mutex.lock();
         *guard = true;
         self.condvar.notify_all();
     }
 
     #[inline]
     fn is_exit(&self) -> bool {
-        *self.mutex.lock().unwrap()
+        *self.mutex.lock()
     }
 
     #[inline]
     fn wait_for_exit(&self, dur: core::time::Duration) -> bool {
-        let Ok(res) = self
-            .condvar
-            .wait_timeout_while(self.mutex.lock().unwrap(), dur, |exit| !*exit)
-            .map_err(|e| anyhow::anyhow!("Condvar wait failed: {e:?}"))
-        else {
-            return true;
-        };
+        let res =
+            self.condvar
+                .wait_while_for(&mut self.mutex.lock(), |exit: &mut bool| !*exit, dur);
 
-        if res.1.timed_out() {
+        if res.timed_out() {
             info!("Wait timed out after {:?}", dur);
             return false;
         }

@@ -3,8 +3,10 @@
 use std::process::ExitCode;
 use tracing::{error, trace};
 
-const VERSION: &str = env!("CARGO_PKG_VERSION");
+#[cfg(debug_assertions)]
 const GIT_COMMIT_SHA: &str = env!("GIT_COMMIT_SHA");
+#[cfg(debug_assertions)]
+const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 fn main() -> ExitCode {
     init_app();
@@ -37,7 +39,9 @@ fn init_app() {
         .with_ansi(true)
         .try_init();
 
+    #[cfg(debug_assertions)]
     trace!("Starting Flow application, \nVersion: {VERSION}\nGit Commit SHA: {GIT_COMMIT_SHA}");
+
     mitigations::enable_mitigations();
     idler_utils::ExecState::start();
 }
