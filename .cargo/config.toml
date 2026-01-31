@@ -1,6 +1,6 @@
 [build]
 rustflags = [
-    "-D", "warnings",
+    #"-D", "warnings",
     "--cfg", "windows_slim_errors", 
     "-C", "target-cpu=x86-64-v3",
     "-C", "control-flow-guard",

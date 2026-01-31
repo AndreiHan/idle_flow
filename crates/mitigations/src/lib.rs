@@ -6,7 +6,6 @@ use std::sync::{LazyLock, atomic::AtomicBool};
 use parking_lot::Mutex;
 use tracing::{error, info, trace};
 use windows::{
-    Wdk::System::Threading::{NtSetInformationThread, ThreadHideFromDebugger},
     Win32::{
         Foundation::GetLastError,
         System::{
@@ -30,6 +29,10 @@ use windows::{
     },
     core::{HSTRING, Owned, PCWSTR, PWSTR},
 };
+
+mod thread;
+
+pub use thread::hide_current_thread_from_debuggers;
 
 const PROCESS_CREATION_MITIGATION_POLICY_BLOCK_NON_MICROSOFT_BINARIES_ALWAYS_ON: u64 =
     0x0000_0001_u64 << 44;
@@ -224,7 +227,7 @@ pub fn join_timeout(
 #[allow(clippy::missing_panics_doc)]
 pub fn enable_mitigations() {
     info!("Enabling mitigations");
-    hide_current_thread_from_debuggers();
+    thread::hide_current_thread_from_debuggers();
     heap_protection();
     exclude_wefault();
     clean_env();
@@ -292,23 +295,6 @@ pub fn set_process_priority() {
         let status = SetPriorityClass(GetCurrentProcess(), BELOW_NORMAL_PRIORITY_CLASS);
         trace!("Set process priority to BelowNormal: {status:?}");
     }
-}
-
-#[inline]
-pub fn hide_current_thread_from_debuggers() {
-    if cfg!(debug_assertions) {
-        info!("[DEBUG-MODE] NOT SETTING anti debug status");
-        return;
-    }
-    let status = unsafe {
-        NtSetInformationThread(
-            GetCurrentThread(),
-            ThreadHideFromDebugger,
-            std::ptr::null(),
-            0,
-        )
-    };
-    info!("Set anti debug status: {status:?}");
 }
 
 #[inline]

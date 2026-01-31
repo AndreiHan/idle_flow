@@ -22,7 +22,9 @@ windows = { workspace = true, features = [
   "Win32_Security",
   "Win32_System_Environment",
   "Win32_System_ErrorReporting",
-  "Win32_System_Console"
+  "Win32_System_Console",
+  "Win32_System_Kernel",
+  "Win32_System_Diagnostics_Debug",
 ] }
 
 [lints]
