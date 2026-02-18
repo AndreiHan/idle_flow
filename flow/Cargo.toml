@@ -10,6 +10,8 @@ version.workspace = true
 ProductName = "Flow"
 LegalCopyright = "IF©2025"
 OriginalFilename = "flow.exe"
+FileDescription = "Flow - Idle management application"
+CompanyName = "IF"
 
 [package.metadata.cargo-machete]
 ignored = ["tauri-winres"]

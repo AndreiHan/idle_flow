@@ -257,6 +257,11 @@ impl DebugRegisters for CONTEXT {
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::unreadable_literal,
+    clippy::field_reassign_with_default,
+    clippy::too_many_lines
+)]
 mod tests {
     use super::*;
 

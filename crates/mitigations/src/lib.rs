@@ -7,13 +7,16 @@ use parking_lot::Mutex;
 use tracing::{error, info, trace};
 use windows::{
     Win32::{
-        Foundation::GetLastError,
+        Foundation::{CloseHandle, GetLastError},
         System::{
             Console::FreeConsole,
             ErrorReporting::WerAddExcludedApplication,
+            LibraryLoader::{
+                LOAD_LIBRARY_SEARCH_SYSTEM32, SetDefaultDllDirectories, SetDllDirectoryW,
+            },
             Memory::{
-                GetProcessHeap, HEAP_ZERO_MEMORY, HeapAlloc, HeapEnableTerminationOnCorruption,
-                HeapOptimizeResources, HeapSetInformation,
+                GetProcessHeap, HEAP_ZERO_MEMORY, HeapAlloc, HeapCompatibilityInformation,
+                HeapEnableTerminationOnCorruption, HeapOptimizeResources, HeapSetInformation,
             },
             SystemServices::HEAP_OPTIMIZE_RESOURCES_INFORMATION,
             Threading::{
@@ -27,7 +30,7 @@ use windows::{
             },
         },
     },
-    core::{HSTRING, Owned, PCWSTR, PWSTR},
+    core::{HSTRING, Owned, PCWSTR, PWSTR, w},
 };
 
 mod thread;
@@ -47,13 +50,12 @@ pub trait Closeable {
 
 #[inline]
 pub fn clean_env() {
-    // Clear the environment variables
-    if ENV_CLEANED.load(std::sync::atomic::Ordering::Relaxed) {
+    let _lock = ENV_MUTEX.lock();
+
+    if ENV_CLEANED.swap(true, std::sync::atomic::Ordering::SeqCst) {
         trace!("Environment already cleaned, skipping");
         return;
     }
-    ENV_CLEANED.store(true, std::sync::atomic::Ordering::Relaxed);
-    let _lock = ENV_MUTEX.lock();
     let env = std::env::vars().collect::<Vec<_>>();
     for (key, _val) in env {
         unsafe {
@@ -179,6 +181,14 @@ pub fn restart_self() -> Result<(), anyhow::Error> {
             return Err(anyhow::anyhow!("Failed to create process"));
         }
         trace!("Process created successfully, exiting current process");
+
+        if !process_info.hThread.is_invalid() {
+            let _ = CloseHandle(process_info.hThread);
+        }
+        if !process_info.hProcess.is_invalid() {
+            let _ = CloseHandle(process_info.hProcess);
+        }
+
         free_console();
         Ok(())
     }
@@ -240,6 +250,17 @@ fn heap_protection() {
     info!("Enabling heap protections");
     let res = unsafe { HeapSetInformation(None, HeapEnableTerminationOnCorruption, None, 0) };
     info!("HeapSetInformation - HeapEnableTerminationOnCorruption result: {res:?}");
+
+    let mut heap_compat: u32 = 2;
+    let res = unsafe {
+        HeapSetInformation(
+            GetProcessHeap().ok(),
+            HeapCompatibilityInformation,
+            Some((&raw mut heap_compat).cast::<std::ffi::c_void>()),
+            std::mem::size_of::<u32>(),
+        )
+    };
+    info!("HeapSetInformation - HeapCompatibilityInformation (LFH) result: {res:?}");
 
     let heap_info = HEAP_OPTIMIZE_RESOURCES_INFORMATION {
         Version: 1,
@@ -319,6 +340,12 @@ fn exclude_wefault() {
 }
 
 #[inline]
+pub fn dll_protections() {
+    let _ = unsafe { SetDllDirectoryW(w!("")) };
+    let _ = unsafe { SetDefaultDllDirectories(LOAD_LIBRARY_SEARCH_SYSTEM32) };
+}
+
+#[inline]
 fn set_policy_mitigation() {
     if std::env::args().any(|arg| arg == "--clean") {
         info!("Found --clean argument, setting child process policy");
@@ -364,7 +391,6 @@ fn set_policy_mitigation() {
         .inspect(|()| trace!("Image load policy set"))
         .expect("Failed to set image load policy");
 
-    #[cfg(debug_assertions)]
     win_mitigations::strict_handle::StrictHandlePolicy::default()
         .set_raise_exception_on_invalid_handle_reference(true)
         .set_handle_exceptions_permanently_enabled(true)

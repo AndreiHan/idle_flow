@@ -9,6 +9,7 @@ const GIT_COMMIT_SHA: &str = env!("GIT_COMMIT_SHA");
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 fn main() -> ExitCode {
+    mitigations::dll_protections();
     init_app();
     if !std::env::args().any(|arg| arg == "--clean") {
         trace!("Restarting Flow application");
