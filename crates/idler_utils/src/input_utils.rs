@@ -1,6 +1,6 @@
 #![cfg(windows)]
 use anyhow::Result;
-use rand::{Rng, rng};
+use rand::{RngExt, rng};
 use tracing::{error, info};
 use windows::{
     Win32::{

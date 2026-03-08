@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use parking_lot::{Condvar, Mutex};
-use rand::{Rng, rng};
+use rand::{RngExt, rng};
 use tracing::{debug, error, info, warn};
 use windows::Win32::UI::WindowsAndMessaging::{WM_ENDSESSION, WM_QUERYENDSESSION};
 use windows::{
