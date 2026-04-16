@@ -126,7 +126,7 @@ fn handle_tray_icon_event(
     }
 
     let now = std::time::Instant::now();
-    let debounce = std::time::Duration::from_secs(120);
+    let debounce = std::time::Duration::from_mins(2);
     if let Some(last) = app.last_tray_update {
         let elapsed = now.duration_since(last);
         if elapsed < debounce {
